@@ -6,11 +6,12 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import { Cartridge, LabelArt } from "../components/Cartridge";
 import { useContextMenu, type MenuItem } from "../components/ContextMenu";
+import { DeleteFromOrigins } from "../components/DeleteFromOrigins";
 import { ProviderIcon as Provider } from "../components/ProviderIcon";
 import { MoveTargets, TransferProgress, useDestinations, useMove, useTransfers } from "../components/Transfers";
 import { ManageCollections, TitleCollections, TypeFilter, useTags, type TypeKey } from "../components/Collections";
 import { ProviderIcon } from "../components/ProviderIcon";
-import { Badge, Button, cx, Input, Modal, PageHeader, Select, Sheet, useToast } from "../components/ui";
+import { Badge, Button, copyText, cx, Input, Modal, PageHeader, Select, Sheet, useToast } from "../components/ui";
 import { Trans, useI18n } from "../i18n";
 import { api, type Integration, type Kind, type LibraryFile, type PendingFile, type TagsResponse } from "../lib/api";
 import { bytes, cleanName, genreLabel, kindLabel, prettyTitle, versionLabel } from "../lib/format";
@@ -109,7 +110,6 @@ export function LibraryPage() {
   const [openKey, setOpenKey] = useState<string | null>(null);
   const pending = useQuery({ queryKey: ["identify-pending"], queryFn: () => api<{ files: PendingFile[] }>("/identify/pending") });
   const unidentified = pending.data?.files.length ?? 0;
-  useTransfers({ notify: true });
   const [types, setTypes] = useState<Set<TypeKey>>(new Set());
   const [managing, setManaging] = useState(false);
   const tags = useTags();
@@ -613,47 +613,8 @@ function FileRow({ item }: { item: Item }) {
         )}
         {panel === "delete" && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-            <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
-              {replicated ? (
-                <>
-                  <p className="text-[13px] text-mute">{t("library.row.deleteOneHint")}</p>
-                  {item.replicas.map((r) => (
-                    <div key={r.id} className="flex items-center gap-2 text-[13px]">
-                      <ProviderIcon type={r.integrationType} className="size-3.5" />
-                      <span className="flex-1">{r.integrationName}</span>
-                      <Button size="sm" variant="ghost" disabled={remove.isPending} onClick={() => remove.mutate([r])}>
-                        {t("library.row.deleteThisCopy")}
-                      </Button>
-                    </div>
-                  ))}
-                  <div className="flex justify-end gap-2 pt-1">
-                    <Button size="sm" variant="ghost" onClick={() => setPanel(null)}>
-                      {t("common.actions.cancel")}
-                    </Button>
-                    <Button size="sm" variant="danger" loading={remove.isPending} onClick={() => remove.mutate(item.replicas)}>
-                      {t("library.row.deleteAllCopies")}
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="mr-auto text-[13px] text-mute">
-                    {t(
-                      primary.integrationType === "gdrive"
-                        ? "library.row.trashDrive"
-                        : primary.integrationType === "s3"
-                          ? "library.row.deleteBucket"
-                          : "library.row.deleteDisk",
-                    )}
-                  </span>
-                  <Button size="sm" variant="ghost" onClick={() => setPanel(null)} disabled={remove.isPending}>
-                    {t("common.actions.cancel")}
-                  </Button>
-                  <Button size="sm" variant="danger" loading={remove.isPending} onClick={() => remove.mutate([primary])}>
-                    {t("library.row.deleteButton")}
-                  </Button>
-                </div>
-              )}
+            <div className="mt-3 border-t border-line pt-3">
+              <DeleteFromOrigins compact files={item.replicas} onCancel={() => setPanel(null)} onDone={() => setPanel(null)} />
             </div>
           </motion.div>
         )}
@@ -937,7 +898,10 @@ function useLibraryMenus() {
       {
         label: t("library.menu.copyName"),
         icon: <Copy />,
-        onSelect: () => void navigator.clipboard.writeText(item.name).then(() => toast(t("library.menu.nameCopied"))),
+        onSelect: () =>
+          void copyText(item.name).then((ok) =>
+            ok ? toast(t("library.menu.nameCopied")) : toast(t("common.actions.copyFailed"), "error"),
+          ),
       },
       { separator: true },
       {
@@ -955,52 +919,9 @@ function useLibraryMenus() {
 
 function ConfirmDelete({ files, onClose }: { files: LibraryFile[] | null; onClose: () => void }) {
   const { t } = useI18n();
-  const qc = useQueryClient();
-  const toast = useToast();
-  const remove = useMutation({
-    mutationFn: async (list: LibraryFile[]) => {
-      const failures: string[] = [];
-      for (const f of list) {
-        try {
-          await api(`/files/${f.id}?remote=1`, { method: "DELETE" });
-        } catch (err) {
-          failures.push(`${f.name}: ${err instanceof Error ? err.message : err}`);
-        }
-      }
-      return { failures, total: list.length };
-    },
-    onSuccess: ({ failures, total }) => {
-      const ok = total - failures.length;
-      if (ok) toast(t("library.confirm.deleted", { count: ok }));
-      for (const f of failures) toast(f, "error");
-      void qc.invalidateQueries({ queryKey: ["files"] });
-      void qc.invalidateQueries({ queryKey: ["integrations"] });
-      onClose();
-    },
-  });
-  const list = files ?? [];
   return (
-    <Modal open={!!files} onClose={onClose} title={t("library.confirm.title", { count: list.length })}>
-      <p className="text-sm text-mute">{t("library.confirm.body")}</p>
-      <ul className="mt-4 flex flex-col gap-1.5 rounded-xl border border-line bg-panel p-3">
-        {list.map((f) => (
-          <li key={f.id} className="flex items-center gap-2 text-[12px]">
-            <Provider type={f.integrationType} className="size-3.5 shrink-0" />
-            <span className="data min-w-0 flex-1 truncate" title={f.name}>
-              {f.name}
-            </span>
-            <span className="data shrink-0 text-mute">{bytes(f.size)}</span>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-6 flex justify-end gap-2">
-        <Button variant="ghost" onClick={onClose} disabled={remove.isPending}>
-          {t("common.actions.cancel")}
-        </Button>
-        <Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate(list)}>
-          {t("library.confirm.button", { count: list.length })}
-        </Button>
-      </div>
+    <Modal open={!!files} onClose={onClose} title={t("library.remove.title")}>
+      {files && <DeleteFromOrigins files={files} onCancel={onClose} onDone={onClose} />}
     </Modal>
   );
 }
