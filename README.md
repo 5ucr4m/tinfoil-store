@@ -23,12 +23,29 @@ pnpm --filter @cartucho/server dev                            # API em :3000
 API_URL=http://localhost:3000 pnpm --filter @cartucho/web dev # painel em :5173
 ```
 
+## Imagem Docker
+
+O workflow `.github/workflows/docker.yml` publica a imagem no GitHub Container Registry a cada push:
+
+| Tag | Quando |
+|---|---|
+| `ghcr.io/5ucr4m/tinfoil-store:latest` | push na `main` |
+| `ghcr.io/5ucr4m/tinfoil-store:sha-xxxxxxx` | todo build (para fixar versão ou voltar) |
+| `ghcr.io/5ucr4m/tinfoil-store:1.2.3` | tag `v1.2.3` |
+
+A imagem é só `linux/amd64` (VPS). No primeiro publish, confira em **GitHub → Packages → tinfoil-store → Package settings** se a visibilidade está como **Public**; senão o Dokploy precisa de login no `ghcr.io`.
+
 ## Deploy no Dokploy
 
-1. Crie uma aplicação do tipo Docker Compose apontando para este repositório (ou Dockerfile, com volume em `/data`).
-2. Defina `PUBLIC_URL=https://store.seudominio.com` e um `APP_SECRET` fixo (ele criptografa os tokens das integrações; se mudar, é preciso reconectar).
-3. Configure o domínio com HTTPS no Traefik, apontando para a porta 3000 do container.
-4. No Google Cloud, o URI de redirecionamento passa a ser `https://store.seudominio.com/api/integrations/gdrive/callback`.
+1. Crie uma aplicação **Docker Compose** apontando para este repositório, com o arquivo `docker-compose.prod.yml`.
+2. Em **Environment**, defina:
+   - `PUBLIC_URL=https://store.seudominio.com`
+   - `APP_SECRET=` um valor fixo gerado com `openssl rand -hex 32`. Ele criptografa os tokens das integrações e assina os links de download; se mudar, é preciso reconectar as integrações.
+   - `GAMES_PATH=/caminho/no/servidor` (opcional) para guardar os jogos da "Pasta no servidor" num disco do host. A pasta precisa ser gravável pelo usuário `1000` do container. Sem essa variável, os jogos ficam no volume `cartucho-games`.
+   - `CARTUCHO_TAG=sha-xxxxxxx` (opcional) para fixar uma versão em vez de `latest`.
+3. Em **Domains**, adicione o domínio com HTTPS apontando para o serviço `app`, porta `3000`.
+4. Para atualizar, use **Redeploy** (puxa a `latest`), ou ligue o webhook de deploy automático do Dokploy.
+5. No Google Cloud, o URI de redirecionamento passa a ser `https://store.seudominio.com/api/integrations/gdrive/callback`.
 
 ## Como a store funciona
 
