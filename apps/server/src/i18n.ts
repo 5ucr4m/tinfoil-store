@@ -80,6 +80,7 @@ const en = {
     driveStatus: "Google Drive responded {status}.",
     copyIncomplete: "Incomplete copy: {copied} of {total} bytes.",
     sizeMismatch: "The size at the destination doesn't match. The source was kept.",
+    transferNotRunning: "This transfer has already finished.",
 
     titledbStatus: "titledb responded {status}.",
   },
@@ -175,6 +176,7 @@ const ptBR: Messages = {
     driveStatus: "O Google Drive respondeu {status}.",
     copyIncomplete: "Cópia incompleta: {copied} de {total} bytes.",
     sizeMismatch: "O tamanho no destino não confere. A origem foi mantida.",
+    transferNotRunning: "Essa transferência já terminou.",
 
     titledbStatus: "O titledb respondeu {status}.",
   },
@@ -268,6 +270,7 @@ const es: Messages = {
     driveStatus: "Google Drive respondió {status}.",
     copyIncomplete: "Copia incompleta: {copied} de {total} bytes.",
     sizeMismatch: "El tamaño en el destino no coincide. Se conservó el original.",
+    transferNotRunning: "Esta transferencia ya terminó.",
 
     titledbStatus: "titledb respondió {status}.",
   },

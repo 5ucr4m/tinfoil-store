@@ -4,6 +4,7 @@ import { Check, Pause, Play, Plug, RotateCw, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router";
 import { LabelArt, Pins } from "../components/Cartridge";
+import { TransferQueue } from "../components/Transfers";
 import { ProviderIcon, providerLabel } from "../components/ProviderIcon";
 import { Badge, Button, cx, PageHeader, Spinner, Switch, useToast } from "../components/ui";
 import { Trans, useI18n } from "../i18n";
@@ -226,6 +227,7 @@ export function UploadPage() {
       </div>
 
       <Queue uploads={uploads} />
+      <TransferQueue />
     </>
   );
 }

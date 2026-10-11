@@ -10,6 +10,18 @@ const transfers: Messages<typeof en> = {
   copying: "Copiando para {to} · {done} de {total}",
   moving: "Movendo para {to} · {done} de {total}",
   finishing: "Finalizando em {to}",
+  canceledToast: "Transferência de {name} cancelada.",
+  queue: {
+    title: "Cópias e movimentações",
+    summary: "{done} de {total} · {speed}/s · faltam {remaining}",
+    calculating: "calculando",
+    clearFinished: "Limpar concluídas",
+    cancel: "Cancelar transferência",
+    mode: { copy: "Cópia", move: "Movimentação" },
+    state: { queued: "Na fila", copying: "Copiando", moving: "Movendo", finishing: "Finalizando", done: "Concluída", error: "Falhou", canceled: "Cancelada" },
+    progress: "{done} de {total} · {speed}/s · {remaining}",
+    doneIn: "Agora em {to}",
+  },
 };
 
 export default transfers;

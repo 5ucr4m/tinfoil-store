@@ -7,4 +7,16 @@ export default {
   copying: "Copying to {to} · {done} of {total}",
   moving: "Moving to {to} · {done} of {total}",
   finishing: "Finishing in {to}",
+  canceledToast: "Transfer of {name} canceled.",
+  queue: {
+    title: "Copies and moves",
+    summary: "{done} of {total} · {speed}/s · {remaining} left",
+    calculating: "calculating",
+    clearFinished: "Clear finished",
+    cancel: "Cancel transfer",
+    mode: { copy: "Copy", move: "Move" },
+    state: { queued: "Queued", copying: "Copying", moving: "Moving", finishing: "Finishing", done: "Done", error: "Failed", canceled: "Canceled" },
+    progress: "{done} of {total} · {speed}/s · {remaining}",
+    doneIn: "Now in {to}",
+  },
 };

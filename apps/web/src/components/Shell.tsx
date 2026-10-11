@@ -7,7 +7,9 @@ import { api } from "../lib/api";
 import { bytes } from "../lib/format";
 import { useTheme, type ThemePref } from "../lib/theme";
 import { isActive, useUploads } from "../lib/uploads";
+import type { Transfer } from "../lib/api";
 import { Pins } from "./Cartridge";
+import { isRunning as isTransferRunning, transferSpeed, useTransfers } from "./Transfers";
 import { LanguageSwitch } from "./LanguageSwitch";
 import { cx } from "./ui";
 
@@ -74,16 +76,19 @@ function ThemeSwitch() {
 }
 
 /** Persistent transfer readout, visible from any page while uploads run. */
-function TransferDock() {
+/** Browser uploads plus server copies/moves, as one meter visible from every page. */
+function TransferDock({ transfers }: { transfers: Transfer[] }) {
   const { t } = useI18n();
   const uploads = useUploads();
   const running = uploads.filter((u) => isActive(u.state) || u.state === "queued");
-  const total = running.reduce((s, u) => s + u.size, 0);
-  const sent = running.reduce((s, u) => s + u.sent, 0);
-  const speed = running.reduce((s, u) => s + u.speed, 0);
+  const serverRunning = transfers.filter(isTransferRunning);
+  const count = running.length + serverRunning.length;
+  const total = running.reduce((s, u) => s + u.size, 0) + serverRunning.reduce((s, x) => s + x.size, 0);
+  const sent = running.reduce((s, u) => s + u.sent, 0) + serverRunning.reduce((s, x) => s + x.copied, 0);
+  const speed = running.reduce((s, u) => s + u.speed, 0) + serverRunning.reduce((s, x) => s + transferSpeed(x), 0);
   return (
     <AnimatePresence>
-      {running.length > 0 && (
+      {count > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -94,7 +99,7 @@ function TransferDock() {
             className="block rounded-2xl bg-raised p-3 text-ink ring-1 ring-line transition-transform hover:-translate-y-0.5 dark:bg-shell dark:text-white dark:ring-shell-edge"
           >
             <div className="flex items-baseline justify-between">
-              <span className="eyebrow dark:!text-white/60">{t("shell.dock.writing", { count: running.length })}</span>
+              <span className="eyebrow dark:!text-white/60">{t("shell.dock.writing", { count })}</span>
               <span className="data text-[11px] text-pin">{total ? Math.floor((sent / total) * 100) : 0}%</span>
             </div>
             <Pins progress={total ? sent / total : 0} active count={14} className="mt-2" />
@@ -110,7 +115,10 @@ export function Shell({ children, onLogout }: { children: ReactNode; onLogout: (
   const { t } = useI18n();
   const location = useLocation();
   const uploads = useUploads();
-  const activeCount = uploads.filter((u) => isActive(u.state) || u.state === "queued").length;
+  // Polls server transfers while any runs and raises done/failed toasts on every page.
+  const transfers = useTransfers({ notify: true });
+  const activeCount =
+    uploads.filter((u) => isActive(u.state) || u.state === "queued").length + transfers.filter(isTransferRunning).length;
 
   const logout = async () => {
     await api("/auth/logout", { method: "POST" }).catch(() => {});
@@ -158,7 +166,7 @@ export function Shell({ children, onLogout }: { children: ReactNode; onLogout: (
           ))}
         </nav>
         <div className="mt-auto flex flex-col gap-4">
-          <TransferDock />
+          <TransferDock transfers={transfers} />
           <div className="flex flex-col gap-2 px-1">
             <LanguageSwitch />
             <div className="flex items-center justify-between">

@@ -4,7 +4,7 @@ import { driverFor, getIntegration } from "../drivers";
 import { errorMessage, fail, failWith } from "../http";
 import { localeOf, readStored } from "../i18n";
 import { lookupTitles, refreshTitleDb, titleDbStatus } from "../titles";
-import { listTransfers, startMove } from "../transfer";
+import { cancelTransfer, clearFinishedTransfers, listTransfers, startMove } from "../transfer";
 import { serveFile } from "./store";
 
 /** titledb status with its error in the request's language. */
@@ -45,6 +45,13 @@ export const fileRoutes = new Hono()
   })
   .on(["GET", "HEAD"], "/:id/download", serveFile)
   .get("/transfers", (c) => c.json({ transfers: listTransfers(localeOf(c)) }))
+  .post("/transfers/:id/cancel", (c) =>
+    cancelTransfer(c.req.param("id")) ? c.json({ ok: true }) : fail(c, "errors.transferNotRunning", 409),
+  )
+  .delete("/transfers/finished", (c) => {
+    clearFinishedTransfers();
+    return c.json({ transfers: listTransfers(localeOf(c)) });
+  })
   .post("/:id/move", async (c) => {
     const { integrationId, mode } = (await c.req.json()) as { integrationId?: string; mode?: "move" | "copy" };
     if (!integrationId) return fail(c, "errors.chooseDestination");

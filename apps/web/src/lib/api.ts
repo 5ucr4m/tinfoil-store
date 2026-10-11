@@ -162,7 +162,8 @@ export interface Transfer {
   toId: string;
   toName: string;
   mode: "move" | "copy";
-  state: "queued" | "copying" | "finishing" | "done" | "error";
+  state: "queued" | "copying" | "finishing" | "done" | "error" | "canceled";
+  copyStartedAt?: number;
   copied: number;
   error?: string;
   startedAt: number;

@@ -24,8 +24,10 @@ export interface Transfer {
   toName: string;
   /** move deletes the source after copying; copy keeps it (replica/backup). */
   mode: "move" | "copy";
-  state: "queued" | "copying" | "finishing" | "done" | "error";
+  state: "queued" | "copying" | "finishing" | "done" | "error" | "canceled";
   copied: number;
+  /** When bytes started flowing (queue time excluded), for speed and time left. */
+  copyStartedAt?: number;
   /** Translated per request when listed. */
   errorStored?: StoredMessage;
   startedAt: number;
@@ -35,6 +37,10 @@ export interface Transfer {
 
 const transfers = new Map<string, Transfer>();
 const queue: string[] = [];
+const cancelRequested = new Set<string>();
+class Canceled extends Error {}
+
+const isFinished = (t: Transfer) => t.state === "done" || t.state === "error" || t.state === "canceled";
 let running = 0;
 const CONCURRENCY = 2;
 
@@ -61,7 +67,7 @@ export function startMove(fileId: string, toId: string, mode: "move" | "copy" = 
     .prepare("SELECT 1 FROM files WHERE integration_id = ? AND name = ? AND size = ?")
     .get(to.id, file.name, file.size);
   if (replica) throw new AppError("errors.replicaExists", { name: to.name }, 409);
-  const active = [...transfers.values()].find((t) => t.fileId === fileId && !["done", "error"].includes(t.state));
+  const active = [...transfers.values()].find((t) => t.fileId === fileId && !isFinished(t));
   if (active) return present(active, locale);
 
   const t: Transfer = {
@@ -84,6 +90,26 @@ export function startMove(fileId: string, toId: string, mode: "move" | "copy" = 
   return present(t, locale);
 }
 
+/** Cancels a queued transfer at once, or a running one at its next chunk. */
+export function cancelTransfer(id: string) {
+  const t = transfers.get(id);
+  if (!t || isFinished(t)) return false;
+  const queued = queue.indexOf(id);
+  if (queued >= 0) {
+    queue.splice(queued, 1);
+    t.state = "canceled";
+    t.finishedAt = Date.now();
+  } else {
+    cancelRequested.add(id);
+  }
+  return true;
+}
+
+/** Forgets finished transfers (done, failed or canceled). */
+export function clearFinishedTransfers() {
+  for (const [id, t] of transfers) if (isFinished(t)) transfers.delete(id);
+}
+
 function pump() {
   while (running < CONCURRENCY && queue.length) {
     const t = transfers.get(queue.shift()!)!;
@@ -100,30 +126,41 @@ async function* chunks(stream: ReadableStream<Uint8Array>, size: number) {
   const reader = stream.getReader();
   let buf = new Uint8Array(size);
   let fill = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    let pos = 0;
-    while (pos < value.length) {
-      const take = Math.min(size - fill, value.length - pos);
-      buf.set(value.subarray(pos, pos + take), fill);
-      fill += take;
-      pos += take;
-      if (fill === size) {
-        yield buf;
-        buf = new Uint8Array(size);
-        fill = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      let pos = 0;
+      while (pos < value.length) {
+        const take = Math.min(size - fill, value.length - pos);
+        buf.set(value.subarray(pos, pos + take), fill);
+        fill += take;
+        pos += take;
+        if (fill === size) {
+          yield buf;
+          buf = new Uint8Array(size);
+          fill = 0;
+        }
       }
     }
+    if (fill) yield buf.subarray(0, fill);
+  } finally {
+    // Stops the provider download when the copy ends early (cancel or error).
+    await reader.cancel().catch(() => {});
   }
-  if (fill) yield buf.subarray(0, fill);
 }
 
 const chunkSizeOf = (plan: UploadPlan) =>
   plan.kind === "s3" ? plan.partSize : plan.chunkSize;
 
 async function run(t: Transfer) {
+  if (cancelRequested.delete(t.id)) {
+    t.state = "canceled";
+    t.finishedAt = Date.now();
+    return;
+  }
   t.state = "copying";
+  t.copyStartedAt = Date.now();
   const file = db.prepare("SELECT * FROM files WHERE id = ?").get(t.fileId) as FileRow | undefined;
   const from = getIntegration(t.fromId);
   const to = getIntegration(t.toId);
@@ -147,6 +184,7 @@ async function run(t: Transfer) {
     let n = 0;
 
     for await (const chunk of chunks(await source.read(file.remote_id, null), chunkSizeOf(plan))) {
+      if (cancelRequested.has(t.id)) throw new Canceled();
       n++;
       if (dest instanceof LocalDriver) {
         const res = await dest.writeChunk(uploadId, offset, new Blob([chunk]).stream());
@@ -183,9 +221,14 @@ async function run(t: Transfer) {
     t.state = "done";
   } catch (err) {
     await dest.abortUpload({ uploadId, name: file.name, size: file.size, data }).catch(() => {});
-    t.state = "error";
-    t.errorStored = storeError(err);
+    if (err instanceof Canceled) {
+      t.state = "canceled";
+    } else {
+      t.state = "error";
+      t.errorStored = storeError(err);
+    }
   } finally {
+    cancelRequested.delete(t.id);
     t.finishedAt = Date.now();
   }
 }
