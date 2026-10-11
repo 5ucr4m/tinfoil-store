@@ -4,7 +4,7 @@ import { driverFor, getIntegration } from "./drivers";
 import { LocalDriver } from "./drivers/local";
 import { S3Driver } from "./drivers/s3";
 import type { UploadPlan } from "./drivers/types";
-import { errorMessage } from "./http";
+import { AppError, DEFAULT_LOCALE, readStored, storeError, type Locale, type StoredMessage } from "./i18n";
 import { upsertFile, type FileRow } from "./library";
 
 /**
@@ -26,7 +26,8 @@ export interface Transfer {
   mode: "move" | "copy";
   state: "queued" | "copying" | "finishing" | "done" | "error";
   copied: number;
-  error?: string;
+  /** Translated per request when listed. */
+  errorStored?: StoredMessage;
   startedAt: number;
   finishedAt?: number;
   newFileId?: string;
@@ -37,23 +38,31 @@ const queue: string[] = [];
 let running = 0;
 const CONCURRENCY = 2;
 
-export const listTransfers = () =>
-  [...transfers.values()].sort((a, b) => b.startedAt - a.startedAt).slice(0, 50);
+/** Transfer as sent to the panel, with its error in the given language. */
+function present({ errorStored, ...t }: Transfer, locale: Locale) {
+  return { ...t, error: readStored(locale, errorStored) };
+}
 
-export function startMove(fileId: string, toId: string, mode: "move" | "copy" = "move") {
+export const listTransfers = (locale: Locale = DEFAULT_LOCALE) =>
+  [...transfers.values()]
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .slice(0, 50)
+    .map((t) => present(t, locale));
+
+export function startMove(fileId: string, toId: string, mode: "move" | "copy" = "move", locale: Locale = DEFAULT_LOCALE) {
   const file = db.prepare("SELECT * FROM files WHERE id = ?").get(fileId) as FileRow | undefined;
-  if (!file) throw new Error("Arquivo não encontrado.");
+  if (!file) throw new AppError("errors.fileNotFound", undefined, 404);
   const from = getIntegration(file.integration_id);
   const to = getIntegration(toId);
-  if (!from || !to) throw new Error("Destino não encontrado.");
-  if (from.id === to.id) throw new Error("O arquivo já está nesse destino.");
-  if (to.status === "pending") throw new Error("Termine de conectar esse destino antes de mover.");
+  if (!from || !to) throw new AppError("errors.destinationNotFound", undefined, 404);
+  if (from.id === to.id) throw new AppError("errors.alreadyInDestination");
+  if (to.status === "pending") throw new AppError("errors.destinationPendingMove");
   const replica = db
     .prepare("SELECT 1 FROM files WHERE integration_id = ? AND name = ? AND size = ?")
     .get(to.id, file.name, file.size);
-  if (replica) throw new Error(`Já existe uma cópia desse arquivo em ${to.name}.`);
+  if (replica) throw new AppError("errors.replicaExists", { name: to.name }, 409);
   const active = [...transfers.values()].find((t) => t.fileId === fileId && !["done", "error"].includes(t.state));
-  if (active) return active;
+  if (active) return present(active, locale);
 
   const t: Transfer = {
     id: newId(),
@@ -72,7 +81,7 @@ export function startMove(fileId: string, toId: string, mode: "move" | "copy" = 
   transfers.set(t.id, t);
   queue.push(t.id);
   pump();
-  return t;
+  return present(t, locale);
 }
 
 function pump() {
@@ -120,7 +129,7 @@ async function run(t: Transfer) {
   const to = getIntegration(t.toId);
   if (!file || !from || !to) {
     t.state = "error";
-    t.error = "Arquivo ou destino removido durante a cópia.";
+    t.errorStored = { messageKey: "errors.removedDuringCopy" };
     return;
   }
   const source = driverFor(from);
@@ -141,7 +150,7 @@ async function run(t: Transfer) {
       n++;
       if (dest instanceof LocalDriver) {
         const res = await dest.writeChunk(uploadId, offset, new Blob([chunk]).stream());
-        if (!res.ok) throw new Error("Escrita fora de ordem no disco.");
+        if (!res.ok) throw new AppError("errors.diskOutOfOrder");
       } else if (dest instanceof S3Driver) {
         parts.push({ partNumber: n, etag: await dest.putPart(data, n, chunk) });
       } else if (plan.kind === "gdrive") {
@@ -152,17 +161,17 @@ async function run(t: Transfer) {
           body: chunk,
         });
         if (res.status === 200 || res.status === 201) payload.remoteId = ((await res.json()) as { id: string }).id;
-        else if (res.status !== 308) throw new Error(`Google Drive respondeu ${res.status}`);
+        else if (res.status !== 308) throw new AppError("errors.driveStatus", { status: res.status });
       }
       offset += chunk.length;
       t.copied = offset;
     }
-    if (offset !== file.size) throw new Error(`Cópia incompleta: ${offset} de ${file.size} bytes.`);
+    if (offset !== file.size) throw new AppError("errors.copyIncomplete", { copied: offset, total: file.size });
 
     t.state = "finishing";
     if (parts.length) payload.parts = parts;
     const remote = await dest.completeUpload({ uploadId, name: file.name, size: file.size, data }, payload);
-    if (remote.size !== file.size) throw new Error("O tamanho no destino não confere. A origem foi mantida.");
+    if (remote.size !== file.size) throw new AppError("errors.sizeMismatch");
 
     // New row first, then drop the old one: the library never loses the title.
     const moved = upsertFile(to.id, remote);
@@ -175,7 +184,7 @@ async function run(t: Transfer) {
   } catch (err) {
     await dest.abortUpload({ uploadId, name: file.name, size: file.size, data }).catch(() => {});
     t.state = "error";
-    t.error = errorMessage(err);
+    t.errorStored = storeError(err);
   } finally {
     t.finishedAt = Date.now();
   }

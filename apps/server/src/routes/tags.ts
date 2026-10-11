@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { newId } from "../crypto";
 import { db, getSetting, setSetting } from "../db";
+import { fail, failIssue } from "../http";
 
 interface TagRow {
   id: string;
@@ -12,12 +13,13 @@ interface TagRow {
 }
 
 // Collections most libraries want. eShop genres don't cover these sub-genres,
-// so they match on the title description instead.
+// so they match on the title description instead. Seeded once, in English;
+// the user renames them freely.
 const PRESETS = [
   { name: "Metroidvania", hue: 285, keywords: ["metroidvania", "metroid-vania", "metroid vania", "search action"] },
   { name: "Roguelike", hue: 25, keywords: ["roguelike", "roguelite", "rogue-like", "rogue-lite"] },
   { name: "Soulslike", hue: 355, keywords: ["soulslike", "souls-like"] },
-  { name: "Cooperativo", hue: 160, keywords: ["co-op", "cooperative", "coop"] },
+  { name: "Co-op", hue: 160, keywords: ["co-op", "cooperative", "coop"] },
 ];
 
 export function seedTags() {
@@ -78,18 +80,18 @@ export function tagMemberships() {
 }
 
 const tagSchema = z.object({
-  name: z.string().trim().min(1, "Dê um nome à coleção").max(40),
+  name: z.string().trim().min(1, "errors.collectionNameRequired").max(40, "errors.collectionNameTooLong"),
   hue: z.number().int().min(0).max(359).optional(),
-  keywords: z.array(z.string().trim().max(60)).max(30).default([]),
+  keywords: z.array(z.string().trim().max(60, "errors.keywordTooLong")).max(30, "errors.tooManyKeywords").default([]),
 });
 
 export const tagRoutes = new Hono()
   .get("/", (c) => c.json(tagMemberships()))
   .post("/", async (c) => {
     const parsed = tagSchema.safeParse(await c.req.json());
-    if (!parsed.success) return c.json({ error: parsed.error.issues[0].message }, 400);
+    if (!parsed.success) return failIssue(c, parsed.error.issues);
     const exists = db.prepare("SELECT 1 FROM tags WHERE name = ? COLLATE NOCASE").get(parsed.data.name);
-    if (exists) return c.json({ error: "Já existe uma coleção com esse nome." }, 409);
+    if (exists) return fail(c, "errors.collectionExists", 409);
     const count = (db.prepare("SELECT COUNT(*) AS n FROM tags").get() as { n: number }).n;
     db.prepare("INSERT INTO tags (id, name, hue, keywords, created_at) VALUES (?, ?, ?, ?, ?)").run(
       newId(),
@@ -102,7 +104,7 @@ export const tagRoutes = new Hono()
   })
   .patch("/:id", async (c) => {
     const parsed = tagSchema.partial().safeParse(await c.req.json());
-    if (!parsed.success) return c.json({ error: parsed.error.issues[0].message }, 400);
+    if (!parsed.success) return failIssue(c, parsed.error.issues);
     const { name, hue, keywords } = parsed.data;
     const id = c.req.param("id");
     if (name) db.prepare("UPDATE tags SET name = ? WHERE id = ?").run(name, id);
@@ -117,7 +119,7 @@ export const tagRoutes = new Hono()
   .put("/:id/items", async (c) => {
     const body = (await c.req.json()) as { key?: string; state?: "add" | "remove" | "auto" };
     if (!body.key || !["add", "remove", "auto"].includes(body.state ?? "")) {
-      return c.json({ error: "Dados inválidos." }, 400);
+      return fail(c, "errors.invalidData");
     }
     const id = c.req.param("id");
     if (body.state === "auto") {

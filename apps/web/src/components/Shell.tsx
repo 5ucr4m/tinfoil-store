@@ -2,19 +2,21 @@ import { AnimatePresence, motion } from "motion/react";
 import { Gamepad2, Library, LogOut, Monitor, Moon, Plug, ShieldCheck, Sun, Upload } from "lucide-react";
 import type { ReactNode } from "react";
 import { NavLink, useLocation } from "react-router";
+import { useI18n, type MessageKey } from "../i18n";
 import { api } from "../lib/api";
 import { bytes } from "../lib/format";
 import { useTheme, type ThemePref } from "../lib/theme";
 import { isActive, useUploads } from "../lib/uploads";
 import { Pins } from "./Cartridge";
+import { LanguageSwitch } from "./LanguageSwitch";
 import { cx } from "./ui";
 
-const NAV = [
-  { to: "/", label: "Biblioteca", icon: Library },
-  { to: "/enviar", label: "Enviar", icon: Upload },
-  { to: "/integracoes", label: "Integrações", icon: Plug },
-  { to: "/acesso", label: "Acesso", icon: ShieldCheck },
-  { to: "/tinfoil", label: "Conectar Tinfoil", short: "Tinfoil", icon: Gamepad2 },
+const NAV: { to: string; label: MessageKey; short?: MessageKey; icon: typeof Library }[] = [
+  { to: "/", label: "shell.nav.library", icon: Library },
+  { to: "/upload", label: "shell.nav.upload", icon: Upload },
+  { to: "/integrations", label: "shell.nav.integrations", icon: Plug },
+  { to: "/access", label: "shell.nav.access", icon: ShieldCheck },
+  { to: "/connect", label: "shell.nav.tinfoil", short: "shell.nav.tinfoilShort", icon: Gamepad2 },
 ];
 
 export function Wordmark({ className }: { className?: string }) {
@@ -36,13 +38,14 @@ export function Wordmark({ className }: { className?: string }) {
 
 function ThemeSwitch() {
   const { pref, setTheme } = useTheme();
+  const { t } = useI18n();
   const options: { value: ThemePref; icon: typeof Sun; label: string }[] = [
-    { value: "light", icon: Sun, label: "Tema claro" },
-    { value: "system", icon: Monitor, label: "Seguir o sistema" },
-    { value: "dark", icon: Moon, label: "Tema escuro" },
+    { value: "light", icon: Sun, label: t("common.theme.light") },
+    { value: "system", icon: Monitor, label: t("common.theme.system") },
+    { value: "dark", icon: Moon, label: t("common.theme.dark") },
   ];
   return (
-    <div className="relative flex rounded-xl border border-line bg-panel p-0.5" role="radiogroup" aria-label="Tema">
+    <div className="relative flex rounded-xl border border-line bg-panel p-0.5" role="radiogroup" aria-label={t("common.theme.label")}>
       {options.map(({ value, icon: Icon, label }) => (
         <button
           key={value}
@@ -72,6 +75,7 @@ function ThemeSwitch() {
 
 /** Persistent transfer readout, visible from any page while uploads run. */
 function TransferDock() {
+  const { t } = useI18n();
   const uploads = useUploads();
   const running = uploads.filter((u) => isActive(u.state) || u.state === "queued");
   const total = running.reduce((s, u) => s + u.size, 0);
@@ -86,11 +90,11 @@ function TransferDock() {
           exit={{ opacity: 0, y: 8 }}
         >
           <NavLink
-            to="/enviar"
+            to="/upload"
             className="block rounded-2xl bg-raised p-3 text-ink ring-1 ring-line transition-transform hover:-translate-y-0.5 dark:bg-shell dark:text-white dark:ring-shell-edge"
           >
             <div className="flex items-baseline justify-between">
-              <span className="eyebrow dark:!text-white/60">Gravando {running.length}</span>
+              <span className="eyebrow dark:!text-white/60">{t("shell.dock.writing", { count: running.length })}</span>
               <span className="data text-[11px] text-pin">{total ? Math.floor((sent / total) * 100) : 0}%</span>
             </div>
             <Pins progress={total ? sent / total : 0} active count={14} className="mt-2" />
@@ -103,6 +107,7 @@ function TransferDock() {
 }
 
 export function Shell({ children, onLogout }: { children: ReactNode; onLogout: () => void }) {
+  const { t } = useI18n();
   const location = useLocation();
   const uploads = useUploads();
   const activeCount = uploads.filter((u) => isActive(u.state) || u.state === "queued").length;
@@ -118,7 +123,7 @@ export function Shell({ children, onLogout }: { children: ReactNode; onLogout: (
         <div className="px-2">
           <Wordmark />
         </div>
-        <nav className="mt-10 flex flex-col gap-1" aria-label="Principal">
+        <nav className="mt-10 flex flex-col gap-1" aria-label={t("shell.nav.label")}>
           {NAV.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
@@ -141,8 +146,8 @@ export function Shell({ children, onLogout }: { children: ReactNode; onLogout: (
                     />
                   )}
                   <Icon className={cx("relative size-[18px]", isActive && "text-signal")} strokeWidth={isActive ? 2.2 : 1.8} />
-                  <span className="relative">{label}</span>
-                  {to === "/enviar" && activeCount > 0 && (
+                  <span className="relative">{t(label)}</span>
+                  {to === "/upload" && activeCount > 0 && (
                     <span className="data relative ml-auto rounded-md bg-pin px-1.5 text-[10px] leading-5 font-semibold text-shell">
                       {activeCount}
                     </span>
@@ -154,16 +159,19 @@ export function Shell({ children, onLogout }: { children: ReactNode; onLogout: (
         </nav>
         <div className="mt-auto flex flex-col gap-4">
           <TransferDock />
-          <div className="flex items-center justify-between px-1">
-            <ThemeSwitch />
-            <button
-              onClick={logout}
-              className="grid size-9 place-items-center rounded-xl text-mute transition-colors hover:bg-raised hover:text-ink"
-              aria-label="Sair"
-              title="Sair"
-            >
-              <LogOut className="size-4" />
-            </button>
+          <div className="flex flex-col gap-2 px-1">
+            <LanguageSwitch />
+            <div className="flex items-center justify-between">
+              <ThemeSwitch />
+              <button
+                onClick={logout}
+                className="grid size-9 place-items-center rounded-xl text-mute transition-colors hover:bg-raised hover:text-ink"
+                aria-label={t("shell.signOut")}
+                title={t("shell.signOut")}
+              >
+                <LogOut className="size-4" />
+              </button>
+            </div>
           </div>
         </div>
       </aside>
@@ -172,8 +180,9 @@ export function Shell({ children, onLogout }: { children: ReactNode; onLogout: (
       <div className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-paper/85 px-4 py-3 backdrop-blur md:hidden">
         <Wordmark />
         <div className="flex items-center gap-1">
+          <LanguageSwitch variant="compact" />
           <ThemeSwitch />
-          <button onClick={logout} className="grid size-9 place-items-center rounded-xl text-mute" aria-label="Sair">
+          <button onClick={logout} className="grid size-9 place-items-center rounded-xl text-mute" aria-label={t("shell.signOut")}>
             <LogOut className="size-4" />
           </button>
         </div>
@@ -194,7 +203,7 @@ export function Shell({ children, onLogout }: { children: ReactNode; onLogout: (
 
       {/* Mobile bottom nav */}
       <nav
-        aria-label="Principal"
+        aria-label={t("shell.nav.label")}
         className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
       >
         {NAV.map(({ to, label, short, icon: Icon }) => (
@@ -207,8 +216,8 @@ export function Shell({ children, onLogout }: { children: ReactNode; onLogout: (
             }
           >
             <Icon className="size-5" strokeWidth={1.9} />
-            {short ?? label}
-            {to === "/enviar" && activeCount > 0 && (
+            {t(short ?? label)}
+            {to === "/upload" && activeCount > 0 && (
               <span className="absolute top-1.5 right-[calc(50%-18px)] size-2 rounded-full bg-pin" />
             )}
           </NavLink>

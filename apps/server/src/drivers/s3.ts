@@ -13,6 +13,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { basename } from "node:path";
+import { AppError } from "../i18n";
 import { isGameFile } from "../titles";
 import type { ByteRange, Driver, RemoteFile, UploadRef } from "./types";
 
@@ -97,7 +98,7 @@ export class S3Driver implements Driver {
         Range: range ? `bytes=${range.start}-${range.end}` : undefined,
       }),
     );
-    if (!res.Body) throw new Error("Objeto sem conteúdo");
+    if (!res.Body) throw new AppError("errors.s3EmptyObject");
     return res.Body.transformToWebStream() as ReadableStream<Uint8Array>;
   }
 
@@ -203,13 +204,13 @@ export class S3Driver implements Driver {
         ContentLength: body.length,
       }),
     );
-    if (!res.ETag) throw new Error(`O bucket não devolveu ETag da parte ${partNumber}`);
+    if (!res.ETag) throw new AppError("errors.s3MissingEtag", { part: partNumber });
     return res.ETag;
   }
 
   async completeUpload(ref: UploadRef, payload: Record<string, unknown>) {
     const parts = payload.parts as { partNumber: number; etag: string }[] | undefined;
-    if (!parts?.length) throw new Error("Lista de partes vazia");
+    if (!parts?.length) throw new AppError("errors.s3NoParts");
     const key = ref.data.key as string;
     await this.client.send(
       new CompleteMultipartUploadCommand({

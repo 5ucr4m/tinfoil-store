@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { getLocale, translate } from "../i18n";
 import { api, type IntegrationType, type LibraryFile } from "./api";
 import { parseTitle } from "./format";
 
@@ -224,7 +225,7 @@ function put(
     if (onProgress) xhr.upload.onprogress = (e) => onProgress(e.loaded);
     xhr.onload = () =>
       resolve({ status: xhr.status, text: xhr.responseText, header: (n) => xhr.getResponseHeader(n) });
-    xhr.onerror = () => reject(internal.stop ? new StopSignal() : new HttpError("Falha de rede", 0));
+    xhr.onerror = () => reject(internal.stop ? new StopSignal() : new HttpError(translate("upload.errors.network"), 0));
     xhr.onabort = () => reject(new StopSignal());
     xhr.send(body);
   });
@@ -305,8 +306,9 @@ async function uploadLocal(key: string, internal: Internal, plan: Extract<Plan, 
     const res = await withRetry(key, async () => {
       const r = await put(key, `/api/uploads/${internal.serverId}/chunk?offset=${start}`, file.slice(start, end), {
         "Content-Type": "application/octet-stream",
+        "X-Cartucho-Locale": getLocale(),
       }, (loaded) => patch(key, { sent: start + loaded }));
-      if (r.status >= 400 && r.status !== 409) throw new HttpError(JSON.parse(r.text || "{}").error ?? `Erro ${r.status}`, r.status);
+      if (r.status >= 400 && r.status !== 409) throw new HttpError(JSON.parse(r.text || "{}").error ?? translate("upload.errors.status", { status: r.status }), r.status);
       return r;
     });
     internal.committed = JSON.parse(res.text).offset;
@@ -343,9 +345,9 @@ async function uploadDrive(key: string, internal: Internal, plan: Extract<Plan, 
         (loaded) => patch(key, { sent: start + loaded }),
       );
       if (r.status === 404 || r.status === 410) {
-        throw new HttpError("A sessão de upload do Google expirou. Remova e envie de novo.", r.status);
+        throw new HttpError(translate("upload.errors.driveExpired"), r.status);
       }
-      if (r.status !== 308 && r.status >= 300) throw new HttpError(`Google Drive respondeu ${r.status}`, r.status);
+      if (r.status !== 308 && r.status >= 300) throw new HttpError(translate("upload.errors.driveStatus", { status: r.status }), r.status);
       return r;
     });
     if (res.status === 200 || res.status === 201) {
@@ -374,12 +376,12 @@ async function uploadS3(key: string, internal: Internal, plan: Extract<Plan, { k
       const r = await put(key, plan.partUrls[i], file.slice(start, end), {}, (loaded) =>
         patch(key, { sent: internal.committed + loaded }),
       );
-      if (r.status >= 300) throw new HttpError(`O bucket recusou a parte ${partNumber} (${r.status})`, r.status);
+      if (r.status >= 300) throw new HttpError(translate("upload.errors.partRejected", { part: partNumber, status: r.status }), r.status);
       return r;
     });
     const etag = res.header("ETag");
     if (!etag) {
-      throw new Error("O bucket não expôs o header ETag. Libere ETag em ExposeHeaders na configuração de CORS.");
+      throw new Error(translate("upload.errors.noEtag"));
     }
     internal.parts.push({ partNumber, etag });
     internal.committed += end - start;

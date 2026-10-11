@@ -2,20 +2,20 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { generatePassword, hashPassword, newId } from "../crypto";
 import { db, setSetting, storeSettings } from "../db";
-import { baseUrl } from "../http";
+import { baseUrl, fail, failIssue } from "../http";
 import { forgetStoreCredentials } from "./store";
 
 const userSchema = z.object({
   username: z
     .string()
     .trim()
-    .min(2, "Use pelo menos 2 caracteres")
-    .regex(/^[a-zA-Z0-9._-]+$/, "Use só letras, números, ponto, hífen ou sublinhado"),
+    .min(2, "errors.userTooShort")
+    .regex(/^[a-zA-Z0-9._-]+$/, "errors.userInvalidChars"),
 });
 
 const settingsSchema = z.object({
-  publicUrl: z.string().trim().refine((v) => v === "" || /^https?:\/\/.+/.test(v), "Use uma URL começando com http(s)://"),
-  welcomeMessage: z.string().max(500),
+  publicUrl: z.string().trim().refine((v) => v === "" || /^https?:\/\/.+/.test(v), "errors.publicUrlInvalid"),
+  welcomeMessage: z.string().max(500, "errors.welcomeTooLong"),
   requireApproval: z.boolean(),
 });
 
@@ -29,9 +29,9 @@ export const accessRoutes = new Hono()
   )
   .post("/users", async (c) => {
     const parsed = userSchema.safeParse(await c.req.json());
-    if (!parsed.success) return c.json({ error: parsed.error.issues[0].message }, 400);
+    if (!parsed.success) return failIssue(c, parsed.error.issues);
     const exists = db.prepare("SELECT 1 FROM store_users WHERE username = ?").get(parsed.data.username);
-    if (exists) return c.json({ error: "Já existe um usuário com esse nome." }, 409);
+    if (exists) return fail(c, "errors.userExists", 409);
     const password = generatePassword();
     db.prepare("INSERT INTO store_users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)").run(
       newId(),
@@ -45,7 +45,7 @@ export const accessRoutes = new Hono()
     const user = db.prepare("SELECT username FROM store_users WHERE id = ?").get(c.req.param("id")) as
       | { username: string }
       | undefined;
-    if (!user) return c.json({ error: "Usuário não encontrado." }, 404);
+    if (!user) return fail(c, "errors.userNotFound", 404);
     const password = generatePassword();
     db.prepare("UPDATE store_users SET password_hash = ? WHERE id = ?").run(await hashPassword(password), c.req.param("id"));
     forgetStoreCredentials();
@@ -95,7 +95,7 @@ export const accessRoutes = new Hono()
   })
   .put("/settings", async (c) => {
     const parsed = settingsSchema.safeParse(await c.req.json());
-    if (!parsed.success) return c.json({ error: parsed.error.issues[0].message }, 400);
+    if (!parsed.success) return failIssue(c, parsed.error.issues);
     setSetting("store", { ...parsed.data, publicUrl: parsed.data.publicUrl.replace(/\/$/, "") });
     return c.json({ settings: storeSettings() });
   });

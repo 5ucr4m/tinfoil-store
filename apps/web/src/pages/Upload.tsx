@@ -4,11 +4,12 @@ import { Check, Pause, Play, Plug, RotateCw, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router";
 import { LabelArt, Pins } from "../components/Cartridge";
-import { ProviderIcon, PROVIDER_LABEL } from "../components/ProviderIcon";
+import { ProviderIcon, providerLabel } from "../components/ProviderIcon";
 import { Badge, Button, cx, PageHeader, Spinner, Switch, useToast } from "../components/ui";
+import { Trans, useI18n } from "../i18n";
 import { api, type Identification, type Integration, type LibraryFile, type TitleInfo } from "../lib/api";
 import { readFileHeader } from "../lib/pfs0";
-import { bytes, cleanName, duration, KIND_LABEL, prettyTitle } from "../lib/format";
+import { bytes, cleanName, duration, kindLabel, prettyTitle } from "../lib/format";
 import {
   cancel,
   clearFinished,
@@ -26,6 +27,7 @@ const TARGET_KEY = "cartucho-upload-target";
 const AUTOFIX_KEY = "cartucho-upload-autofix";
 
 export function UploadPage() {
+  const { t } = useI18n();
   const toast = useToast();
   const integrations = useQuery({
     queryKey: ["integrations"],
@@ -77,7 +79,7 @@ export function UploadPage() {
     if (!target) return;
     const all = Array.from(list);
     const valid = all.filter((f) => ACCEPT.some((ext) => f.name.toLowerCase().endsWith(ext)));
-    if (valid.length < all.length) toast(`${all.length - valid.length} arquivo(s) ignorado(s): use .nsp, .nsz, .xci ou .xcz.`, "error");
+    if (valid.length < all.length) toast(t("upload.toasts.ignored", { count: all.length - valid.length }), "error");
 
     setIdentifying((n) => n + valid.length);
     const named = await Promise.all(
@@ -88,7 +90,7 @@ export function UploadPage() {
       }),
     );
     const renamed = named.filter((n) => n.name !== n.file.name).length;
-    if (renamed) toast(`${renamed} ${renamed === 1 ? "nome corrigido" : "nomes corrigidos"} antes do envio.`, "info");
+    if (renamed) toast(t("upload.toasts.renamed", { count: renamed }), "info");
 
     const existing = new Set(
       (library.data?.files ?? []).filter((f) => f.integrationId === target.id).map((f) => f.name),
@@ -96,7 +98,7 @@ export function UploadPage() {
     const queued = new Set(uploads.filter((u) => u.integrationId === target.id && u.state !== "canceled").map((u) => u.name));
     const fresh = named.filter((f) => !existing.has(f.name) && !queued.has(f.name));
     const skipped = named.length - fresh.length;
-    if (skipped) toast(`${skipped} arquivo(s) já estão em ${target.name} e foram pulados.`, "info");
+    if (skipped) toast(t("upload.toasts.skipped", { count: skipped, target: target.name }), "info");
     if (fresh.length) enqueue(fresh, { id: target.id, name: target.name, type: target.type });
   };
 
@@ -111,15 +113,13 @@ export function UploadPage() {
   if (!ready.length) {
     return (
       <>
-        <PageHeader title="Enviar" />
+        <PageHeader title={t("upload.title")} />
         <div className="rounded-3xl border border-line bg-panel px-6 py-16 text-center">
-          <h2 className="display-narrow text-2xl">Conecte um destino primeiro</h2>
-          <p className="mx-auto mt-2 max-w-md text-mute">
-            Os arquivos vão direto do seu navegador para o Google Drive, para um bucket S3 ou para uma pasta do servidor.
-          </p>
-          <Link to="/integracoes" className="mt-6 inline-block">
+          <h2 className="display-narrow text-2xl">{t("upload.noTarget.title")}</h2>
+          <p className="mx-auto mt-2 max-w-md text-mute">{t("upload.noTarget.body")}</p>
+          <Link to="/integrations" className="mt-6 inline-block">
             <Button variant="primary" icon={<Plug className="size-4" />}>
-              Conectar um destino
+              {t("upload.noTarget.action")}
             </Button>
           </Link>
         </div>
@@ -129,15 +129,15 @@ export function UploadPage() {
 
   return (
     <>
-      <PageHeader title="Enviar" meta="Os arquivos vão direto do navegador para o destino escolhido, sem passar pelo servidor (exceto na pasta local)." />
+      <PageHeader title={t("upload.title")} meta={t("upload.meta")} />
 
       <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="eyebrow">Destino</h2>
-        <Link to="/integracoes" className="text-[13px] text-signal hover:underline">
-          Gerenciar integrações
+        <h2 className="eyebrow">{t("upload.target.label")}</h2>
+        <Link to="/integrations" className="text-[13px] text-signal hover:underline">
+          {t("upload.target.manage")}
         </Link>
       </div>
-      <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3" role="radiogroup" aria-label="Destino do upload">
+      <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3" role="radiogroup" aria-label={t("upload.target.groupLabel")}>
         {ready.map((i) => (
           <TargetCard key={i.id} integration={i} selected={target?.id === i.id} onSelect={() => setTargetId(i.id)} />
         ))}
@@ -174,14 +174,17 @@ export function UploadPage() {
           </div>
           <div>
             <p className="display-narrow text-2xl sm:text-3xl">
-              {dragging ? `Solte para gravar em ${target?.name}` : "Arraste os arquivos até o slot"}
+              {dragging ? t("upload.slot.drop", { name: target?.name ?? "" }) : t("upload.slot.drag")}
             </p>
             <p className="mt-2 text-sm text-mute dark:text-white/55">
-              ou{" "}
-              <span className="text-signal underline decoration-signal/30 underline-offset-4 group-hover:decoration-signal dark:text-white dark:decoration-white/30 dark:group-hover:decoration-white">
-                escolha no computador
-              </span>{" "}
-              · .nsp, .nsz, .xci, .xcz
+              <Trans
+                k="upload.slot.pick"
+                components={{
+                  pick: (
+                    <span className="text-signal underline decoration-signal/30 underline-offset-4 group-hover:decoration-signal dark:text-white dark:decoration-white/30 dark:group-hover:decoration-white" />
+                  ),
+                }}
+              />
             </p>
           </div>
         </button>
@@ -208,18 +211,16 @@ export function UploadPage() {
                 localStorage.setItem(AUTOFIX_KEY, v ? "on" : "off");
               } catch {}
             }}
-            label="Corrigir nomes automaticamente"
+            label={t("upload.autofix.label")}
           />
           <span>
-            Corrigir nomes automaticamente
-            <span className="block text-[12px] text-mute">
-              Arquivos sem title ID no nome sobem como "Jogo [ID][vN]" quando a identificação é confiável.
-            </span>
+            {t("upload.autofix.label")}
+            <span className="block text-[12px] text-mute">{t("upload.autofix.hint")}</span>
           </span>
         </label>
         {identifying > 0 && (
           <span className="flex items-center gap-2 text-[13px] text-mute">
-            <Spinner /> Identificando {identifying} {identifying === 1 ? "arquivo" : "arquivos"}…
+            <Spinner /> {t("upload.autofix.identifying", { count: identifying })}
           </span>
         )}
       </div>
@@ -230,6 +231,7 @@ export function UploadPage() {
 }
 
 function TargetCard({ integration: i, selected, onSelect }: { integration: Integration; selected: boolean; onSelect: () => void }) {
+  const { t } = useI18n();
   const acc = i.detail.account;
   const free = acc?.totalBytes ? acc.totalBytes - (acc.usedBytes ?? 0) : null;
   return (
@@ -247,13 +249,13 @@ function TargetCard({ integration: i, selected, onSelect }: { integration: Integ
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium">{i.name}</p>
-        <p className="truncate text-[12px] text-mute">{acc?.label ?? PROVIDER_LABEL[i.type]}</p>
+        <p className="truncate text-[12px] text-mute">{acc?.label ?? providerLabel(i.type)}</p>
         {acc?.totalBytes ? (
           <div className="mt-2.5">
             <div className="h-1 overflow-hidden rounded-full bg-line">
               <div className="h-full rounded-full bg-signal" style={{ width: `${Math.min(((acc.usedBytes ?? 0) / acc.totalBytes) * 100, 100)}%` }} />
             </div>
-            <p className="data mt-1.5 text-[10px] text-mute">{bytes(free ?? 0)} livres</p>
+            <p className="data mt-1.5 text-[10px] text-mute">{t("upload.target.free", { size: bytes(free ?? 0) })}</p>
           </div>
         ) : null}
       </div>
@@ -274,6 +276,7 @@ function TargetCard({ integration: i, selected, onSelect }: { integration: Integ
 }
 
 function Queue({ uploads }: { uploads: UploadItem[] }) {
+  const { t } = useI18n();
   const ids = useMemo(
     () => [...new Set(uploads.map((u) => u.baseId).filter(Boolean) as string[])].sort(),
     [uploads],
@@ -297,16 +300,17 @@ function Queue({ uploads }: { uploads: UploadItem[] }) {
     <section className="mt-10">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="display-narrow text-2xl">Fila</h2>
+          <h2 className="display-narrow text-2xl">{t("upload.queue.title")}</h2>
           {running.length > 0 && (
             <p className="data mt-1 text-[12px] text-mute">
-              {bytes(sent)} de {bytes(total)} · {bytes(speed)}/s · {speed > 0 ? `faltam ${duration((total - sent) / speed)}` : "calculando"}
+              {t("upload.queue.summary", { sent: bytes(sent), total: bytes(total), speed: bytes(speed) })} ·{" "}
+              {speed > 0 ? t("upload.queue.remaining", { time: duration((total - sent) / speed) }) : t("upload.queue.calculating")}
             </p>
           )}
         </div>
         {finished > 0 && (
           <Button size="sm" variant="ghost" onClick={clearFinished}>
-            Limpar concluídos
+            {t("upload.queue.clearFinished")}
           </Button>
         )}
       </div>
@@ -321,18 +325,8 @@ function Queue({ uploads }: { uploads: UploadItem[] }) {
   );
 }
 
-const STATE_LABEL: Record<UploadItem["state"], string> = {
-  queued: "Na fila",
-  starting: "Abrindo sessão",
-  uploading: "Gravando",
-  paused: "Pausado",
-  finishing: "Finalizando",
-  done: "Na biblioteca",
-  error: "Falhou",
-  canceled: "Cancelado",
-};
-
 function QueueRow({ item: u, title }: { item: UploadItem; title?: TitleInfo }) {
+  const { t } = useI18n();
   const progress = u.size ? u.sent / u.size : u.state === "done" ? 1 : 0;
   const active = u.state === "uploading";
   const name = title?.name ? prettyTitle(title.name) : cleanName(u.name);
@@ -369,7 +363,7 @@ function QueueRow({ item: u, title }: { item: UploadItem; title?: TitleInfo }) {
           <p className="truncate text-sm font-medium" title={u.name}>
             {name}
           </p>
-          <Badge tone={u.kind === "unknown" ? "pin" : "neutral"}>{KIND_LABEL[u.kind]}</Badge>
+          <Badge tone={u.kind === "unknown" ? "pin" : "neutral"}>{kindLabel(u.kind)}</Badge>
         </div>
         <div className="mt-2 flex items-center gap-3">
           <Pins progress={progress} active={active} count={24} className="hidden sm:flex" />
@@ -377,43 +371,49 @@ function QueueRow({ item: u, title }: { item: UploadItem; title?: TitleInfo }) {
           <span className="data text-[11px] text-ink">{Math.floor(progress * 100)}%</span>
         </div>
         {u.originalName && (
-          <p className="data mt-1 truncate text-[10.5px] text-signal" title={`Nome original: ${u.originalName}`}>
-            sobe como {u.name}
+          <p className="data mt-1 truncate text-[10.5px] text-signal" title={t("upload.queue.originalName", { name: u.originalName })}>
+            {t("upload.queue.uploadsAs", { name: u.name })}
           </p>
         )}
         <p className={cx("data mt-1.5 truncate text-[10.5px]", u.state === "error" ? "text-danger" : "text-mute")}>
           {u.state === "error"
             ? u.error
             : u.state === "uploading"
-              ? `${bytes(u.sent)} de ${bytes(u.size)} · ${bytes(u.speed)}/s${u.speed > 0 ? ` · ${duration((u.size - u.sent) / u.speed)}` : ""}${u.retrying ? ` · nova tentativa ${u.retrying}` : ""}`
-              : `${STATE_LABEL[u.state]} · ${bytes(u.size)} · ${u.integrationName}`}
+              ? [
+                  t("upload.queue.progress", { sent: bytes(u.sent), total: bytes(u.size), speed: bytes(u.speed) }),
+                  u.speed > 0 && duration((u.size - u.sent) / u.speed),
+                  u.retrying && t("upload.queue.retry", { attempt: u.retrying }),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : `${t(`upload.state.${u.state}`)} · ${bytes(u.size)} · ${u.integrationName}`}
         </p>
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
         {(u.state === "uploading" || u.state === "queued") && (
-          <IconButton label="Pausar" onClick={() => pause(u.key)}>
+          <IconButton label={t("upload.actions.pause")} onClick={() => pause(u.key)}>
             <Pause className="size-4" />
           </IconButton>
         )}
         {u.state === "paused" && (
-          <IconButton label="Continuar" onClick={() => resume(u.key)}>
+          <IconButton label={t("upload.actions.resume")} onClick={() => resume(u.key)}>
             <Play className="size-4" />
           </IconButton>
         )}
         {u.state === "error" && (
-          <IconButton label="Tentar de novo" onClick={() => resume(u.key)}>
+          <IconButton label={t("upload.actions.retry")} onClick={() => resume(u.key)}>
             <RotateCw className="size-4" />
           </IconButton>
         )}
         {u.state === "starting" || u.state === "finishing" ? (
           <Spinner />
         ) : u.state === "done" || u.state === "canceled" ? (
-          <IconButton label="Tirar da lista" onClick={() => dismiss(u.key)}>
+          <IconButton label={t("upload.actions.dismiss")} onClick={() => dismiss(u.key)}>
             <X className="size-4" />
           </IconButton>
         ) : (
-          <IconButton label="Cancelar envio" onClick={() => cancel(u.key)} danger>
+          <IconButton label={t("upload.actions.cancel")} onClick={() => cancel(u.key)} danger>
             <X className="size-4" />
           </IconButton>
         )}

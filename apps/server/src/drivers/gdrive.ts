@@ -1,3 +1,4 @@
+import { AppError } from "../i18n";
 import { isGameFile } from "../titles";
 import type { ByteRange, Driver, RemoteFile, UploadRef } from "./types";
 
@@ -48,7 +49,8 @@ export async function gdriveExchangeCode(config: GDriveConfig, code: string, red
   });
   const json = (await res.json()) as { refresh_token?: string; error_description?: string; error?: string };
   if (!res.ok || !json.refresh_token) {
-    throw new Error(json.error_description ?? json.error ?? "O Google não devolveu um refresh token");
+    if (json.error_description ?? json.error) throw new Error(json.error_description ?? json.error);
+    throw new AppError("errors.googleNoRefreshToken");
   }
   return json.refresh_token;
 }
@@ -62,7 +64,7 @@ export class GDriveDriver implements Driver {
   private async token() {
     const cached = tokenCache.get(this.id);
     if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
-    if (!this.config.refreshToken) throw new Error("Conta Google não conectada");
+    if (!this.config.refreshToken) throw new AppError("errors.googleNotConnected");
     const res = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -75,7 +77,8 @@ export class GDriveDriver implements Driver {
     });
     const json = (await res.json()) as { access_token?: string; expires_in?: number; error_description?: string };
     if (!res.ok || !json.access_token) {
-      throw new Error(json.error_description ?? "Falha ao renovar o acesso ao Google Drive");
+      if (json.error_description) throw new Error(json.error_description);
+      throw new AppError("errors.googleRefreshFailed");
     }
     tokenCache.set(this.id, {
       token: json.access_token,
@@ -213,7 +216,7 @@ export class GDriveDriver implements Driver {
       body: JSON.stringify({ name: ref.name, parents: [folderId] }),
     });
     const sessionUrl = res.headers.get("location");
-    if (!res.ok || !sessionUrl) throw new Error(`Google Drive recusou o upload: ${await res.text()}`);
+    if (!res.ok || !sessionUrl) throw new AppError("errors.googleUploadRejected", { detail: await res.text() });
     return {
       plan: { kind: "gdrive" as const, sessionUrl, chunkSize: CHUNK_SIZE },
       data: { sessionUrl, folderId },
@@ -230,7 +233,7 @@ export class GDriveDriver implements Driver {
       );
       fileId = found.files[0]?.id;
     }
-    if (!fileId) throw new Error("Arquivo não encontrado no Drive após o upload");
+    if (!fileId) throw new AppError("errors.driveFileMissingAfterUpload");
     const file = await this.api<{ id: string; name: string; size: string }>(
       `/files/${fileId}?fields=id,name,size&supportsAllDrives=true`,
     );

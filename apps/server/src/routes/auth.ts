@@ -3,6 +3,7 @@ import { deleteCookie, getSignedCookie, setSignedCookie } from "hono/cookie";
 import { z } from "zod";
 import { hashPassword, secret, verifyPassword } from "../crypto";
 import { getSetting, setSetting } from "../db";
+import { fail, failIssue } from "../http";
 
 const COOKIE = "cartucho_session";
 const SESSION_DAYS = 30;
@@ -35,7 +36,7 @@ async function startSession(c: Parameters<MiddlewareHandler>[0], generation: num
 }
 
 export const requireAdmin: MiddlewareHandler = async (c, next) => {
-  if (!(await isAuthenticated(c))) return c.json({ error: "Sessão expirada. Entre novamente." }, 401);
+  if (!(await isAuthenticated(c))) return fail(c, "errors.sessionExpired", 401);
   await next();
 };
 
@@ -44,33 +45,32 @@ const failures = new Map<string, { count: number; until: number }>();
 const clientIp = (c: Parameters<MiddlewareHandler>[0]) =>
   c.req.header("x-forwarded-for")?.split(",")[0].trim() ?? c.req.header("x-real-ip") ?? "local";
 
-const passwordSchema = z.object({ password: z.string().min(8, "Use pelo menos 8 caracteres") });
+const passwordSchema = z.object({ password: z.string().min(8, "errors.passwordTooShort") });
 
 export const authRoutes = new Hono()
   .get("/state", async (c) =>
     c.json({ needsSetup: admin() === null, authenticated: await isAuthenticated(c) }),
   )
   .post("/setup", async (c) => {
-    if (admin()) return c.json({ error: "O painel já tem senha definida." }, 409);
+    if (admin()) return fail(c, "errors.alreadySetUp", 409);
     const parsed = passwordSchema.safeParse(await c.req.json());
-    if (!parsed.success) return c.json({ error: parsed.error.issues[0].message }, 400);
+    if (!parsed.success) return failIssue(c, parsed.error.issues);
     setSetting("admin", { hash: await hashPassword(parsed.data.password), generation: 1 });
     await startSession(c, 1);
     return c.json({ ok: true });
   })
   .post("/login", async (c) => {
     const ip = clientIp(c);
-    const fail = failures.get(ip);
-    if (fail && fail.until > Date.now()) {
-      const seconds = Math.ceil((fail.until - Date.now()) / 1000);
-      return c.json({ error: `Muitas tentativas. Tente de novo em ${seconds}s.` }, 429);
+    const lock = failures.get(ip);
+    if (lock && lock.until > Date.now()) {
+      return fail(c, "errors.tooManyAttempts", 429, { seconds: Math.ceil((lock.until - Date.now()) / 1000) });
     }
     const current = admin();
     const { password } = (await c.req.json()) as { password?: string };
     if (!current || !password || !(await verifyPassword(password, current.hash))) {
-      const count = (fail?.count ?? 0) + 1;
+      const count = (lock?.count ?? 0) + 1;
       failures.set(ip, { count, until: count >= 5 ? Date.now() + Math.min(2 ** (count - 5), 300) * 1000 : 0 });
-      return c.json({ error: "Senha incorreta." }, 401);
+      return fail(c, "errors.wrongPassword", 401);
     }
     failures.delete(ip);
     await startSession(c, current.generation);
@@ -84,10 +84,10 @@ export const authRoutes = new Hono()
     const body = (await c.req.json()) as { current?: string; password?: string };
     const current = admin()!;
     if (!body.current || !(await verifyPassword(body.current, current.hash))) {
-      return c.json({ error: "A senha atual não confere." }, 400);
+      return fail(c, "errors.currentPasswordMismatch");
     }
     const parsed = passwordSchema.safeParse(body);
-    if (!parsed.success) return c.json({ error: parsed.error.issues[0].message }, 400);
+    if (!parsed.success) return failIssue(c, parsed.error.issues);
     const generation = current.generation + 1;
     setSetting("admin", { hash: await hashPassword(parsed.data.password), generation });
     await startSession(c, generation);

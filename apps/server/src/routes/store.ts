@@ -3,7 +3,8 @@ import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { secret, verifyPassword } from "../crypto";
 import { db, storeSettings } from "../db";
 import { driverFor, getIntegration } from "../drivers";
-import { baseUrl, errorMessage, parseRange } from "../http";
+import { baseUrl, errorMessage, fail, parseRange } from "../http";
+import { localeOf, tr } from "../i18n";
 import { cachedImage, type ImageKind } from "../images";
 import type { FileRow } from "../library";
 import { parseFileName } from "../titles";
@@ -18,7 +19,8 @@ const verified = new Map<string, { userId: string; expiresAt: number }>();
 export const forgetStoreCredentials = () => verified.clear();
 
 const unauthorized = (c: Context) =>
-  c.json({ error: "Usuário ou senha da store incorretos." }, 401, {
+  // Tinfoil sends its own Language header, so console errors follow the console's language.
+  c.json({ error: tr(localeOf(c), "store.badCredentials") }, 401, {
     "WWW-Authenticate": 'Basic realm="Cartucho", charset="UTF-8"',
   });
 
@@ -30,7 +32,7 @@ const clientIp = (c: Context) =>
 const basicAuth: MiddlewareHandler = async (c, next) => {
   const hasUsers = db.prepare("SELECT 1 FROM store_users LIMIT 1").get();
   if (!hasUsers) {
-    return c.json({ error: "A store ainda não tem usuários. Crie um no painel, em Acesso." });
+    return c.json({ error: tr(localeOf(c), "store.noUsers") });
   }
   const header = c.req.header("authorization") ?? "";
   if (!header.startsWith("Basic ")) return unauthorized(c);
@@ -43,10 +45,9 @@ const basicAuth: MiddlewareHandler = async (c, next) => {
   }
 
   const ip = clientIp(c);
-  const fail = failures.get(ip);
-  if (fail && fail.until > Date.now()) {
-    const seconds = Math.ceil((fail.until - Date.now()) / 1000);
-    return c.json({ error: `Muitas tentativas com senha errada. Tente de novo em ${seconds}s.` }, 429);
+  const lock = failures.get(ip);
+  if (lock && lock.until > Date.now()) {
+    return fail(c, "store.tooManyAttempts", 429, { seconds: Math.ceil((lock.until - Date.now()) / 1000) });
   }
 
   const decoded = Buffer.from(header.slice(6), "base64").toString("utf8");
@@ -58,7 +59,7 @@ const basicAuth: MiddlewareHandler = async (c, next) => {
     | { id: string; password_hash: string }
     | undefined;
   if (!user || !(await verifyPassword(password, user.password_hash))) {
-    const count = (fail?.count ?? 0) + 1;
+    const count = (lock?.count ?? 0) + 1;
     // Five free attempts, then 2s, 4s, 8s… capped at 15 minutes.
     failures.set(ip, { count, until: count >= 5 ? Date.now() + Math.min(2 ** (count - 4), 900) * 1000 : 0 });
     return unauthorized(c);
@@ -95,8 +96,10 @@ const consoleGate: MiddlewareHandler = async (c, next) => {
       ? (db.prepare("SELECT allowed FROM consoles WHERE uid = ?").get(uid) as { allowed: number } | undefined)
       : undefined;
     if (!allowed?.allowed) {
-      const suffix = uid ? ` Aprove o console ${uid.slice(0, 8)}… no painel, em Acesso.` : "";
-      return c.json({ error: `Este console ainda não foi aprovado.${suffix}` });
+      const locale = localeOf(c);
+      return c.json({
+        error: uid ? tr(locale, "store.consoleNotApprovedUid", { uid: uid.slice(0, 8) }) : tr(locale, "store.consoleNotApproved"),
+      });
     }
   }
   await next();
@@ -132,7 +135,7 @@ const imageToken = (titleId: string, userId: string) => downloadToken(`img:${tit
 
 const imageAuth: MiddlewareHandler = async (c, next) => {
   if (!checkToken(`img:${c.req.param("titleId")}`, c.req.param("token") ?? "")) {
-    return c.json({ error: "Link de imagem inválido ou expirado." }, 401);
+    return fail(c, "store.imageLinkInvalid", 401);
   }
   await next();
 };
@@ -151,7 +154,7 @@ async function serveImage(c: Context) {
 
 const tokenAuth: MiddlewareHandler = async (c, next) => {
   if (!checkToken(c.req.param("id") ?? "", c.req.param("token") ?? "")) {
-    return c.json({ error: "Link de download inválido ou expirado. Abra a store de novo no Tinfoil." }, 401);
+    return fail(c, "store.downloadLinkInvalid", 401);
   }
   await next();
 };
@@ -200,7 +203,7 @@ function buildIndex(c: Context, direct: boolean) {
       return { url, size: f.size };
     }),
   };
-  index.titledb = titleDbFor([...unique.values()], base, userId);
+  index.titledb = titleDbFor([...unique.values()], base, userId, tr(localeOf(c), "store.updateSuffix"));
   const { welcomeMessage } = storeSettings();
   if (welcomeMessage) index.success = welcomeMessage;
   return c.json(index);
@@ -224,7 +227,7 @@ interface TitleRow {
  * Metadata Tinfoil can use without its own database or Nintendo's CDN, in titledb's
  * own shape and keyed by title ID. Images point back at this server.
  */
-function titleDbFor(files: FileRow[], base: string, userId: string) {
+function titleDbFor(files: FileRow[], base: string, userId: string, updateSuffix: string) {
   const ids = new Set<string>();
   for (const f of files) {
     if (f.title_id) ids.add(f.title_id);
@@ -250,7 +253,7 @@ function titleDbFor(files: FileRow[], base: string, userId: string) {
     out[id] = {
       ...raw,
       id,
-      name: meta.kind === "update" ? `${row.name} (atualização)` : row.name,
+      name: meta.kind === "update" ? `${row.name} ${updateSuffix}` : row.name,
       publisher: row.publisher ?? raw.publisher,
       description: row.description ?? raw.description,
       iconUrl: row.icon_url ? image(row.id, "icon") : undefined,
@@ -267,7 +270,7 @@ function titleDbFor(files: FileRow[], base: string, userId: string) {
  */
 export async function serveFile(c: Context) {
   const file = db.prepare("SELECT * FROM files WHERE id = ?").get(c.req.param("id")) as FileRow | undefined;
-  if (!file) return c.json({ error: "Arquivo não encontrado." }, 404);
+  if (!file) return fail(c, "errors.fileNotFound", 404);
 
   const range = parseRange(c.req.header("range"), file.size);
   if (range === "invalid") {
@@ -294,10 +297,11 @@ export async function serveFile(c: Context) {
       const stream = await driver.read(copy.remote_id, range);
       return new Response(stream, { status, headers });
     } catch (err) {
-      errors.push(`${integration.name}: ${errorMessage(err)}`);
+      errors.push(`${integration.name}: ${errorMessage(err, localeOf(c))}`);
     }
   }
-  return c.json({ error: `Falha ao ler o arquivo. ${errors.join(" | ") || "Destino removido."}` }, 502);
+  const locale = localeOf(c);
+  return fail(c, "store.readFailed", 502, { detail: errors.join(" | ") || tr(locale, "store.destinationRemoved") });
 }
 
 /** One line per store request: enough to debug a console without logging credentials. */
@@ -307,7 +311,7 @@ const requestLog: MiddlewareHandler = async (c, next) => {
   const h = (name: string) => c.req.header(name);
   console.log(
     `[store] ${c.req.method} ${new URL(c.req.url).pathname} -> ${c.res.status} ${Date.now() - started}ms` +
-      ` host=${h("host")} range=${h("range") ?? "-"} auth=${h("authorization") ? "sim" : "não"}` +
+      ` host=${h("host")} range=${h("range") ?? "-"} auth=${h("authorization") ? "yes" : "no"}` +
       ` uid=${h("uid")?.slice(0, 8) ?? "-"} ua=${h("user-agent") ?? "-"}`,
   );
 };

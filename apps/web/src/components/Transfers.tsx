@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
+import { useI18n } from "../i18n";
 import { api, type Integration, type Transfer } from "../lib/api";
 import { bytes } from "../lib/format";
 import { Pins } from "./Cartridge";
@@ -12,6 +13,7 @@ const isRunning = (t: Transfer) => t.state !== "done" && t.state !== "error";
 export function useTransfers({ notify = false } = {}) {
   const qc = useQueryClient();
   const toast = useToast();
+  const { t: tr } = useI18n();
   const query = useQuery({
     queryKey: ["transfers"],
     queryFn: () => api<{ transfers: Transfer[] }>("/files/transfers"),
@@ -24,12 +26,12 @@ export function useTransfers({ notify = false } = {}) {
       const before = seen.current.get(t.id);
       seen.current.set(t.id, t.state);
       if (!before || before === t.state || isRunning(t)) continue;
-      if (t.state === "done") toast(`${t.name} agora está em ${t.toName}.`);
-      else toast(`Não deu para mover ${t.name}: ${t.error}`, "error");
+      if (t.state === "done") toast(tr("transfers.done", { name: t.name, to: t.toName }));
+      else toast(tr(t.mode === "copy" ? "transfers.copyFailed" : "transfers.moveFailed", { name: t.name, error: t.error ?? "" }), "error");
       void qc.invalidateQueries({ queryKey: ["files"] });
       void qc.invalidateQueries({ queryKey: ["integrations"] });
     }
-  }, [query.data, qc, toast, notify]);
+  }, [query.data, qc, toast, notify, tr]);
   return query.data?.transfers ?? [];
 }
 
@@ -48,7 +50,7 @@ export function useDestinations() {
   return useQuery({ queryKey: ["integrations"], queryFn: () => api<{ integrations: Integration[] }>("/integrations") });
 }
 
-/** Destination list for "Mover para". */
+/** Destination list for "Move to" / "Copy to". */
 export function MoveTargets({
   exclude = [],
   onPick,
@@ -58,9 +60,10 @@ export function MoveTargets({
   onPick: (i: Integration) => void;
   disabled?: boolean;
 }) {
+  const { t } = useI18n();
   const destinations = useDestinations();
   const options = (destinations.data?.integrations ?? []).filter((i) => !exclude.includes(i.id) && i.status !== "pending");
-  if (!options.length) return <p className="text-[13px] text-mute">Nenhum outro destino conectado.</p>;
+  if (!options.length) return <p className="text-[13px] text-mute">{t("transfers.noTargets")}</p>;
   return (
     <div className="flex flex-wrap gap-2">
       {options.map((i) => (
@@ -79,6 +82,7 @@ export function MoveTargets({
 }
 
 export function TransferProgress({ transfer: t, className }: { transfer: Transfer; className?: string }) {
+  const { t: tr } = useI18n();
   const progress = t.size ? t.copied / t.size : 0;
   return (
     <div className={cx("flex flex-col gap-1.5", className)}>
@@ -87,10 +91,14 @@ export function TransferProgress({ transfer: t, className }: { transfer: Transfe
         <span className="data text-[11px]">{Math.floor(progress * 100)}%</span>
       </div>
       <p className="data text-[10.5px] text-mute">
-        {t.state === "queued" && `Na fila para ${t.toName}`}
+        {t.state === "queued" && tr("transfers.queued", { to: t.toName })}
         {t.state === "copying" &&
-          `${t.mode === "copy" ? "Copiando" : "Movendo"} para ${t.toName} · ${bytes(t.copied)} de ${bytes(t.size)}`}
-        {t.state === "finishing" && `Finalizando em ${t.toName}`}
+          tr(t.mode === "copy" ? "transfers.copying" : "transfers.moving", {
+            to: t.toName,
+            done: bytes(t.copied),
+            total: bytes(t.size),
+          })}
+        {t.state === "finishing" && tr("transfers.finishing", { to: t.toName })}
       </p>
     </div>
   );

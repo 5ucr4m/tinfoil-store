@@ -1,5 +1,6 @@
 import { decrypt } from "../crypto";
 import { db } from "../db";
+import { AppError } from "../i18n";
 import { GDriveDriver, type GDriveConfig } from "./gdrive";
 import { LocalDriver, type LocalConfig } from "./local";
 import { S3Driver, type S3Config } from "./s3";
@@ -38,7 +39,7 @@ export function driverFor(row: IntegrationRow): Driver {
       driver = new GDriveDriver(row.id, decrypt<GDriveConfig>(row.config));
       break;
     default:
-      throw new Error(`Tipo de integração desconhecido: ${row.type}`);
+      throw new AppError("errors.unknownIntegrationType", { type: row.type });
   }
   cache.set(row.id, { config: row.config, driver });
   return driver;

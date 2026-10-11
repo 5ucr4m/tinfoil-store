@@ -2,6 +2,7 @@ import { newId } from "./crypto";
 import { db } from "./db";
 import { driverFor, getIntegration } from "./drivers";
 import type { AccountInfo, RemoteFile } from "./drivers/types";
+import { storeError, type StoredMessage } from "./i18n";
 import { parseFileName } from "./titles";
 
 export interface FileRow {
@@ -44,8 +45,8 @@ export function upsertFile(integrationId: string, remote: RemoteFile): FileRow {
     .get(integrationId, remote.remoteId) as FileRow;
 }
 
-export interface IntegrationStatus {
-  message?: string;
+/** Persisted in integrations.status_detail. The error is stored translatable (see i18n.storeError). */
+export interface IntegrationStatus extends StoredMessage {
   account?: AccountInfo;
 }
 
@@ -83,10 +84,7 @@ export async function syncIntegration(id: string) {
     db.prepare("UPDATE integrations SET last_sync_at = ? WHERE id = ?").run(Date.now(), id);
     setStatus(id, "ok", { account });
   } catch (err) {
-    setStatus(id, "error", {
-      ...previous,
-      message: err instanceof Error ? err.message : String(err),
-    });
+    setStatus(id, "error", { ...previous, ...storeError(err) });
   } finally {
     syncing.delete(id);
   }

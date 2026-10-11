@@ -1,6 +1,8 @@
 import type { Context } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { storeSettings } from "./db";
 import { env } from "./env";
+import { AppError, DEFAULT_LOCALE, localeOf, tr, trMaybe, type Locale, type MessageKey, type Params } from "./i18n";
 
 /** Base URL as seen by clients: settings > env > proxy headers > Host. */
 export function baseUrl(c: Context) {
@@ -32,4 +34,18 @@ export function parseRange(header: string | undefined, size: number) {
   return { start, end };
 }
 
-export const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
+/** Error text for a response. AppErrors are translated; provider errors pass through as is. */
+export const errorMessage = (err: unknown, locale: Locale = DEFAULT_LOCALE) =>
+  err instanceof AppError ? tr(locale, err.key, err.params) : err instanceof Error ? err.message : String(err);
+
+/** JSON error response in the request's language. */
+export const fail = (c: Context, key: MessageKey, status: ContentfulStatusCode = 400, params?: Params) =>
+  c.json({ error: tr(localeOf(c), key, params) }, status);
+
+/** Error response for a caught error: AppErrors in the request's language, others as is. */
+export const failWith = (c: Context, err: unknown, status: ContentfulStatusCode = 500) =>
+  c.json({ error: errorMessage(err, localeOf(c)) }, err instanceof AppError && err.status ? (err.status as ContentfulStatusCode) : status);
+
+/** First zod issue, translated when its message is a message key. */
+export const failIssue = (c: Context, issues: { message: string }[]) =>
+  c.json({ error: trMaybe(localeOf(c), issues[0]?.message ?? "errors.invalidData") }, 400);

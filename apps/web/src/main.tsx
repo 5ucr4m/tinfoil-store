@@ -6,6 +6,7 @@ import { Shell } from "./components/Shell";
 import { ContextMenuProvider } from "./components/ContextMenu";
 import { Spinner, ToastProvider } from "./components/ui";
 import "./index.css";
+import { useI18n } from "./i18n";
 import { api } from "./lib/api";
 import { onUploadDone } from "./lib/uploads";
 import { AccessPage } from "./pages/Access";
@@ -21,6 +22,8 @@ const queryClient = new QueryClient({
 });
 
 function App() {
+  // Re-render the whole tree when the language changes (formatters read it directly).
+  useI18n();
   const qc = useQueryClient();
   const auth = useQuery({
     queryKey: ["auth"],
@@ -65,11 +68,17 @@ function App() {
     <Shell onLogout={() => qc.setQueryData(["auth"], { needsSetup: false, authenticated: false })}>
       <Routes>
         <Route path="/" element={<LibraryPage />} />
-        <Route path="/enviar" element={<UploadPage />} />
-        <Route path="/integracoes" element={<IntegrationsPage />} />
-        <Route path="/acesso" element={<AccessPage />} />
-        <Route path="/tinfoil" element={<TinfoilPage />} />
-        <Route path="/identificar" element={<IdentifyPage />} />
+        <Route path="/upload" element={<UploadPage />} />
+        <Route path="/integrations" element={<IntegrationsPage />} />
+        <Route path="/access" element={<AccessPage />} />
+        {/* "/tinfoil" belongs to the store itself; the panel page lives at /connect. */}
+        <Route path="/connect" element={<TinfoilPage />} />
+        <Route path="/identify" element={<IdentifyPage />} />
+        {/* Portuguese paths from the first release */}
+        <Route path="/enviar" element={<Navigate to="/upload" replace />} />
+        <Route path="/integracoes" element={<Navigate to={`/integrations${location.search}`} replace />} />
+        <Route path="/acesso" element={<Navigate to="/access" replace />} />
+        <Route path="/identificar" element={<Navigate to="/identify" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Shell>

@@ -3,6 +3,7 @@ import chain from "stream-chain";
 import { parser } from "stream-json";
 import { streamObject } from "stream-json/streamers/stream-object.js";
 import { db, getSetting, setSetting } from "./db";
+import { AppError, storeError, type StoredMessage } from "./i18n";
 
 export type Kind = "base" | "update" | "dlc" | "unknown";
 
@@ -60,7 +61,9 @@ export interface TitleDbStatus {
   state: "idle" | "running" | "done" | "error";
   count?: number;
   updatedAt?: number;
+  /** Legacy plain error text; newer rows use errorStored. */
   error?: string;
+  errorStored?: StoredMessage;
 }
 
 export const titleDbStatus = () => getSetting<TitleDbStatus>("titledb", { state: "idle" });
@@ -77,7 +80,7 @@ export async function refreshTitleDb() {
   setSetting("titledb", { ...titleDbStatus(), state: "running" });
   try {
     const res = await fetch(TITLEDB_URL);
-    if (!res.ok || !res.body) throw new Error(`titledb respondeu ${res.status}`);
+    if (!res.ok || !res.body) throw new AppError("errors.titledbStatus", { status: res.status });
 
     // Import into a staging table and swap at the end, so the library keeps its
     // covers during the download and survives a failed import.
@@ -157,11 +160,7 @@ export async function refreshTitleDb() {
     setSetting("titledb", { state: "done", count, updatedAt: Date.now() });
     titleDbListeners.forEach((fn) => fn());
   } catch (err) {
-    setSetting("titledb", {
-      ...titleDbStatus(),
-      state: "error",
-      error: err instanceof Error ? err.message : String(err),
-    });
+    setSetting("titledb", { ...titleDbStatus(), state: "error", error: undefined, errorStored: storeError(err) });
   } finally {
     running = false;
   }

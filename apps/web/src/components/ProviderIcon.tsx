@@ -1,4 +1,5 @@
 import { HardDrive } from "lucide-react";
+import { translate } from "../i18n";
 import type { IntegrationType } from "../lib/api";
 import { cx } from "./ui";
 
@@ -24,8 +25,5 @@ export function ProviderIcon({ type, className }: { type: IntegrationType; class
   return <HardDrive className={cx("size-5", className)} strokeWidth={1.8} />;
 }
 
-export const PROVIDER_LABEL: Record<IntegrationType, string> = {
-  gdrive: "Google Drive",
-  s3: "S3 compatível",
-  local: "Pasta no servidor",
-};
+/** Provider name in the current language. Components re-render on language change via the app root. */
+export const providerLabel = (type: IntegrationType) => translate(`common.provider.${type}`);

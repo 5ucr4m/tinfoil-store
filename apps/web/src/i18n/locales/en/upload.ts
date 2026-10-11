@@ -1,0 +1,72 @@
+export default {
+  title: "Upload",
+  meta: "Files go straight from your browser to the destination you pick, without passing through the server (except for the server folder).",
+  noTarget: {
+    title: "Connect a destination first",
+    body: "Files go straight from your browser to Google Drive, an S3 bucket or a folder on the server.",
+    action: "Connect a destination",
+  },
+  target: {
+    label: "Destination",
+    manage: "Manage integrations",
+    groupLabel: "Upload destination",
+    free: "{size} free",
+  },
+  slot: {
+    drop: "Drop to write to {name}",
+    drag: "Drag files to the slot",
+    pick: "or <pick>choose from your computer</pick> · .nsp, .nsz, .xci, .xcz",
+  },
+  autofix: {
+    label: "Fix names automatically",
+    hint: 'Files without a title ID in the name upload as "Game [ID][vN]" when the identification is reliable.',
+    identifying: { one: "Identifying {count} file…", other: "Identifying {count} files…" },
+  },
+  toasts: {
+    ignored: {
+      one: "{count} file ignored: use .nsp, .nsz, .xci or .xcz.",
+      other: "{count} files ignored: use .nsp, .nsz, .xci or .xcz.",
+    },
+    renamed: { one: "{count} name fixed before uploading.", other: "{count} names fixed before uploading." },
+    skipped: {
+      one: "{count} file is already in {target} and was skipped.",
+      other: "{count} files are already in {target} and were skipped.",
+    },
+  },
+  queue: {
+    title: "Queue",
+    summary: "{sent} of {total} · {speed}/s",
+    remaining: "{time} left",
+    calculating: "calculating",
+    clearFinished: "Clear finished",
+    uploadsAs: "uploads as {name}",
+    originalName: "Original name: {name}",
+    progress: "{sent} of {total} · {speed}/s",
+    retry: "retry {attempt}",
+  },
+  state: {
+    queued: "Queued",
+    starting: "Opening session",
+    uploading: "Writing",
+    paused: "Paused",
+    finishing: "Finishing",
+    done: "In the library",
+    error: "Failed",
+    canceled: "Canceled",
+  },
+  actions: {
+    pause: "Pause",
+    resume: "Resume",
+    retry: "Try again",
+    dismiss: "Remove from list",
+    cancel: "Cancel upload",
+  },
+  errors: {
+    network: "Network error.",
+    status: "Error {status}.",
+    driveExpired: "The Google upload session expired. Remove the file and upload it again.",
+    driveStatus: "Google Drive responded {status}.",
+    partRejected: "The bucket rejected part {part} ({status}).",
+    noEtag: "The bucket didn't expose the ETag header. Add ETag to ExposeHeaders in the bucket's CORS configuration.",
+  },
+};

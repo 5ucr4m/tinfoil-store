@@ -1,3 +1,5 @@
+import { getLocale, translate } from "../i18n";
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -12,13 +14,18 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
   const res = await fetch(`/api${path}`, {
     credentials: "same-origin",
     ...rest,
-    headers: { ...(json !== undefined ? { "Content-Type": "application/json" } : {}), ...rest.headers },
+    headers: {
+      ...(json !== undefined ? { "Content-Type": "application/json" } : {}),
+      // Server errors come back in the panel's language.
+      "X-Cartucho-Locale": getLocale(),
+      ...rest.headers,
+    },
     body: json !== undefined ? JSON.stringify(json) : rest.body,
   });
   const body = res.headers.get("content-type")?.includes("json") ? await res.json() : null;
   if (!res.ok) {
     if (res.status === 401 && !path.startsWith("/auth")) window.dispatchEvent(new Event("cartucho:logout"));
-    throw new ApiError(body?.error ?? `Erro ${res.status}`, res.status);
+    throw new ApiError(body?.error ?? translate("common.errors.generic", { status: res.status }), res.status);
   }
   return body as T;
 }

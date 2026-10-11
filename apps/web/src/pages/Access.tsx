@@ -3,13 +3,15 @@ import { AnimatePresence, motion } from "motion/react";
 import { KeyRound, Plus, Trash2, UserRound } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Button, CopyField, cx, Field, Input, PageHeader, Section, Switch, useToast } from "../components/ui";
+import { useI18n } from "../i18n";
 import { api, type Console, type StoreSettings, type StoreUser } from "../lib/api";
 import { ago } from "../lib/format";
 
 export function AccessPage() {
+  const { t } = useI18n();
   return (
     <>
-      <PageHeader title="Acesso" meta="Quem pode abrir a store no Tinfoil e quais consoles já se conectaram." />
+      <PageHeader title={t("access.title")} meta={t("access.meta")} />
       <div className="flex flex-col gap-6">
         <UsersSection />
         <ConsolesSection />
@@ -20,6 +22,7 @@ export function AccessPage() {
 }
 
 function UsersSection() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const toast = useToast();
   const users = useQuery({ queryKey: ["store-users"], queryFn: () => api<{ users: StoreUser[] }>("/access/users") });
@@ -42,7 +45,7 @@ function UsersSection() {
   const remove = useMutation({
     mutationFn: (id: string) => api(`/access/users/${id}`, { method: "DELETE" }),
     onSuccess: () => {
-      toast("Usuário removido. Consoles que usavam esse login perdem o acesso.");
+      toast(t("access.users.removed"));
       void qc.invalidateQueries({ queryKey: ["store-users"] });
     },
   });
@@ -54,8 +57,8 @@ function UsersSection() {
 
   return (
     <Section
-      title="Usuários da store"
-      description="O login que você digita no Tinfoil. Crie um para você e outros para quem você quiser liberar."
+      title={t("access.users.title")}
+      description={t("access.users.description")}
     >
       <AnimatePresence>
         {revealed && (
@@ -66,18 +69,15 @@ function UsersSection() {
             className="overflow-hidden"
           >
             <div className="mb-5 rounded-2xl bg-pin-dim/50 p-4 text-ink ring-1 ring-pin/40 dark:bg-shell dark:text-white dark:ring-shell-edge">
-              <p className="text-sm font-medium">Senha de {revealed.username}</p>
-              <p className="mt-1 text-[13px] text-mute dark:text-white/60">Anote agora. Ela não aparece de novo, mas você pode gerar outra.</p>
+              <p className="text-sm font-medium">{t("access.users.revealTitle", { username: revealed.username })}</p>
+              <p className="mt-1 text-[13px] text-mute dark:text-white/60">{t("access.users.revealNote")}</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2 [&>div]:bg-raised dark:[&>div]:border-white/10 dark:[&>div]:bg-white/5 dark:[&_*]:text-white">
-                <CopyField label="Usuário" value={revealed.username} />
-                <CopyField label="Senha" value={revealed.password} display={revealed.password.replace(/(.{4})(?=.)/g, "$1 ")} />
+                <CopyField label={t("access.users.username")} value={revealed.username} />
+                <CopyField label={t("access.users.password")} value={revealed.password} display={revealed.password.replace(/(.{4})(?=.)/g, "$1 ")} />
               </div>
-              <p className="mt-2 text-[12px] text-mute dark:text-white/60">
-                Os espaços são só para facilitar a leitura e não fazem parte da senha. No Switch, digite tudo junto; o
-                botão de copiar já copia sem espaços.
-              </p>
+              <p className="mt-2 text-[12px] text-mute dark:text-white/60">{t("access.users.readabilityNote")}</p>
               <button onClick={() => setRevealed(null)} className="mt-3 text-[13px] font-medium text-ink hover:underline dark:text-pin">
-                Já anotei
+                {t("access.users.done")}
               </button>
             </div>
           </motion.div>
@@ -97,14 +97,14 @@ function UsersSection() {
             >
               <UserRound className="size-4 text-mute" />
               <span className="data text-[13px]">{u.username}</span>
-              <span className="text-[12px] text-mute">último acesso {ago(u.lastUsedAt)}</span>
+              <span className="text-[12px] text-mute">{t("access.users.lastUsed", { when: ago(u.lastUsedAt) })}</span>
               <div className="ml-auto flex gap-1">
                 <Button size="sm" variant="ghost" icon={<KeyRound className="size-3.5" />} onClick={() => reset.mutate(u.id)} loading={reset.isPending && reset.variables === u.id}>
-                  Nova senha
+                  {t("access.users.newPassword")}
                 </Button>
                 <button
                   onClick={() => remove.mutate(u.id)}
-                  aria-label={`Remover ${u.username}`}
+                  aria-label={t("access.users.removeLabel", { username: u.username })}
                   className="grid size-8 place-items-center rounded-lg text-faint hover:bg-danger-soft hover:text-danger"
                 >
                   <Trash2 className="size-4" />
@@ -115,7 +115,7 @@ function UsersSection() {
         </AnimatePresence>
         {users.data && users.data.users.length === 0 && (
           <li className="px-4 py-6 text-center text-sm text-mute">
-            Sem usuários, a store recusa qualquer acesso. Crie o primeiro abaixo.
+            {t("access.users.empty")}
           </li>
         )}
       </ul>
@@ -124,12 +124,12 @@ function UsersSection() {
         <Input
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder="nome do usuário, ex.: switch-sala"
-          aria-label="Nome do novo usuário"
+          placeholder={t("access.users.placeholder")}
+          aria-label={t("access.users.newUserLabel")}
           className="max-w-xs"
         />
         <Button type="submit" icon={<Plus className="size-4" />} loading={create.isPending} disabled={!username.trim()}>
-          Criar usuário
+          {t("access.users.create")}
         </Button>
       </form>
     </Section>
@@ -137,6 +137,7 @@ function UsersSection() {
 }
 
 function ConsolesSection() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const toast = useToast();
   const consoles = useQuery({ queryKey: ["consoles"], queryFn: () => api<{ consoles: Console[] }>("/access/consoles") });
@@ -160,7 +161,7 @@ function ConsolesSection() {
   const saveSettings = useMutation({
     mutationFn: (next: StoreSettings) => api("/access/settings", { method: "PUT", json: next }),
     onSuccess: (_, next) => {
-      toast(next.requireApproval ? "Agora só consoles aprovados abrem a store." : "Qualquer console com login abre a store.");
+      toast(next.requireApproval ? t("access.consoles.toastApprovedOnly") : t("access.consoles.toastAnyone"));
       void qc.invalidateQueries({ queryKey: ["store-settings"] });
     },
     onError: (e) => toast(e.message, "error"),
@@ -171,16 +172,16 @@ function ConsolesSection() {
 
   return (
     <Section
-      title="Consoles"
-      description="O Tinfoil envia um identificador do console (UID) a cada acesso. Aprove só os seus para bloquear logins vazados."
+      title={t("access.consoles.title")}
+      description={t("access.consoles.description")}
       actions={
         s && (
           <label className="flex items-center gap-3 rounded-2xl border border-line bg-raised px-4 py-2.5">
-            <span className="text-[13px]">Só consoles aprovados</span>
+            <span className="text-[13px]">{t("access.consoles.approvedOnly")}</span>
             <Switch
               checked={s.requireApproval}
               onChange={(v) => saveSettings.mutate({ ...s, requireApproval: v })}
-              label="Só consoles aprovados"
+              label={t("access.consoles.approvedOnly")}
             />
           </label>
         )
@@ -188,7 +189,7 @@ function ConsolesSection() {
     >
       {list.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-line px-4 py-10 text-center text-sm text-mute">
-          Nenhum console conectou ainda. Ele aparece aqui depois do primeiro acesso pelo Tinfoil.
+          {t("access.consoles.empty")}
         </div>
       ) : (
         <ul className="grid gap-3 md:grid-cols-2">
@@ -205,23 +206,23 @@ function ConsolesSection() {
                 <div className="min-w-0 flex-1">
                   <input
                     defaultValue={c.label ?? ""}
-                    placeholder="Dar um nome (ex.: Switch da sala)"
+                    placeholder={t("access.consoles.namePlaceholder")}
                     onBlur={(e) => e.target.value !== (c.label ?? "") && update.mutate({ uid: c.uid, label: e.target.value })}
                     className="w-full rounded-md bg-transparent text-sm font-medium placeholder:font-normal placeholder:text-faint focus:outline-none"
-                    aria-label="Nome do console"
+                    aria-label={t("access.consoles.nameLabel")}
                   />
                   <p className="data mt-1 truncate text-[11px] text-mute" title={c.uid}>
                     {c.uid}
                   </p>
                 </div>
-                <Switch checked={c.allowed} onChange={(v) => update.mutate({ uid: c.uid, allowed: v })} label="Aprovado" />
+                <Switch checked={c.allowed} onChange={(v) => update.mutate({ uid: c.uid, allowed: v })} label={t("access.consoles.approved")} />
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-mute">
-                <span>{c.allowed ? "Aprovado" : "Não aprovado"}</span>
-                <span>visto {ago(c.lastSeen)}</span>
+                <span>{c.allowed ? t("access.consoles.approved") : t("access.consoles.notApproved")}</span>
+                <span>{t("access.consoles.seen", { when: ago(c.lastSeen) })}</span>
                 {c.version && <span className="data text-[11px]">Tinfoil {c.version}</span>}
-                <span className="data text-[11px]">{c.hits} acessos</span>
-                <button onClick={() => remove.mutate(c.uid)} className="ml-auto text-faint hover:text-danger" aria-label="Esquecer console">
+                <span className="data text-[11px]">{t("access.consoles.hits", { count: c.hits })}</span>
+                <button onClick={() => remove.mutate(c.uid)} className="ml-auto text-faint hover:text-danger" aria-label={t("access.consoles.forget")}>
                   <Trash2 className="size-3.5" />
                 </button>
               </div>
@@ -234,20 +235,21 @@ function ConsolesSection() {
 }
 
 function PanelPasswordSection() {
+  const { t } = useI18n();
   const toast = useToast();
   const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
   const change = useMutation({
     mutationFn: () => api("/auth/password", { method: "POST", json: { current, password } }),
     onSuccess: () => {
-      toast("Senha do painel alterada. Outras sessões foram desconectadas.");
+      toast(t("access.panelPassword.changed"));
       setCurrent("");
       setPassword("");
     },
     onError: (e) => toast(e.message, "error"),
   });
   return (
-    <Section title="Senha do painel" description="Trocar a senha desconecta todos os navegadores, menos este.">
+    <Section title={t("access.panelPassword.title")} description={t("access.panelPassword.description")}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -255,14 +257,14 @@ function PanelPasswordSection() {
         }}
         className="grid max-w-2xl gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
       >
-        <Field label="Senha atual">
+        <Field label={t("access.panelPassword.current")}>
           {(id) => <Input id={id} type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />}
         </Field>
-        <Field label="Nova senha">
+        <Field label={t("access.panelPassword.next")}>
           {(id) => <Input id={id} type="password" autoComplete="new-password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required />}
         </Field>
         <Button type="submit" loading={change.isPending}>
-          Trocar senha
+          {t("access.panelPassword.submit")}
         </Button>
       </form>
     </Section>

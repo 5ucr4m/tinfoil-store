@@ -14,6 +14,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { useI18n } from "../i18n";
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 export { cx };
@@ -193,6 +194,7 @@ export function CopyField({
   /** Shown instead of the value (e.g. grouped for reading). The copy button always copies `value`. */
   display?: string;
 }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const [shown, setShown] = useState(!secret);
   const copy = async () => {
@@ -207,14 +209,14 @@ export function CopyField({
         type="button"
         onClick={() => setShown(true)}
         className="data min-w-0 flex-1 truncate text-left text-[12px] text-ink"
-        title={shown ? value : "Mostrar"}
+        title={shown ? value : t("common.actions.show")}
       >
         {shown ? (display ?? value) : "•".repeat(Math.min(value.length, 19))}
       </button>
       <button
         type="button"
         onClick={copy}
-        aria-label={`Copiar ${label ?? "valor"}`}
+        aria-label={label ? t("common.actions.copy", { label }) : t("common.actions.copyValue")}
         className="grid size-8 shrink-0 place-items-center rounded-lg text-mute transition-colors hover:bg-raised hover:text-ink"
       >
         <AnimatePresence mode="wait" initial={false}>
@@ -246,6 +248,7 @@ export function Modal({
   children: ReactNode;
   wide?: boolean;
 }) {
+  const { t } = useI18n();
   useEscape(open, onClose);
   return createPortal(
     <AnimatePresence>
@@ -272,7 +275,7 @@ export function Modal({
           >
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-raised/90 px-6 py-4 backdrop-blur">
               <h2 className="display-narrow text-xl">{title}</h2>
-              <button onClick={onClose} aria-label="Fechar" className="grid size-8 place-items-center rounded-lg text-mute hover:bg-panel hover:text-ink">
+              <button onClick={onClose} aria-label={t("common.actions.close")} className="grid size-8 place-items-center rounded-lg text-mute hover:bg-panel hover:text-ink">
                 <X className="size-4" />
               </button>
             </div>
@@ -286,6 +289,7 @@ export function Modal({
 }
 
 export function Sheet({ open, onClose, children, label }: { open: boolean; onClose: () => void; children: ReactNode; label: string }) {
+  const { t } = useI18n();
   useEscape(open, onClose);
   return createPortal(
     <AnimatePresence>
@@ -304,7 +308,7 @@ export function Sheet({ open, onClose, children, label }: { open: boolean; onClo
           >
             <button
               onClick={onClose}
-              aria-label="Fechar"
+              aria-label={t("common.actions.close")}
               className="absolute top-4 right-4 z-10 grid size-9 place-items-center rounded-full bg-black/40 text-white backdrop-blur hover:bg-black/60"
             >
               <X className="size-4" />

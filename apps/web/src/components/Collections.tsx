@@ -2,41 +2,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { Plus, Settings2, Trash2, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { useI18n } from "../i18n";
 import { api, type Tag, type TagsResponse } from "../lib/api";
+import { genreLabel } from "../lib/format";
 import { Button, cx, Field, Input, Modal, useToast } from "./ui";
-
-/** eShop genres as they come from titledb, in Portuguese. */
-const GENRE_PT: Record<string, string> = {
-  Action: "Ação",
-  Adventure: "Aventura",
-  RPG: "RPG",
-  "Role-Playing": "RPG",
-  Sports: "Esportes",
-  Racing: "Corrida",
-  Puzzle: "Quebra-cabeça",
-  Platformer: "Plataforma",
-  Shooter: "Tiro",
-  Fighting: "Luta",
-  Simulation: "Simulação",
-  Strategy: "Estratégia",
-  Party: "Party",
-  Music: "Música",
-  Arcade: "Arcade",
-  Education: "Educativo",
-  Lifestyle: "Estilo de vida",
-  Training: "Treino",
-  Fitness: "Fitness",
-  "Board Game": "Tabuleiro",
-  Communication: "Comunicação",
-  Study: "Estudo",
-  Utility: "Utilitários",
-  Practical: "Utilitários",
-  Video: "Vídeo",
-  Multiplayer: "Multijogador",
-  Other: "Outros",
-};
-
-export const genreLabel = (g: string) => GENRE_PT[g] ?? g;
 
 export const tagColor = (hue: number) => `oklch(0.68 0.16 ${hue})`;
 
@@ -64,6 +33,7 @@ export function TypeFilter({
   onClear: () => void;
   onManage: () => void;
 }) {
+  const { t } = useI18n();
   const [showAll, setShowAll] = useState(false);
   // Keep the row short: the most common genres, plus any selected one hidden by the cut.
   const visibleGenres = showAll
@@ -72,10 +42,10 @@ export function TypeFilter({
   const hidden = genres.length - visibleGenres.length;
   return (
     <div className="mb-8 flex flex-wrap items-center gap-2">
-      <span className="eyebrow mr-1">Tipo</span>
-      {tags.map((t) => (
-        <Chip key={t.id} active={selected.has(`tag:${t.id}`)} onClick={() => onToggle(`tag:${t.id}`)} hue={t.hue} count={t.count}>
-          {t.name}
+      <span className="eyebrow mr-1">{t("collections.filter.label")}</span>
+      {tags.map((tag) => (
+        <Chip key={tag.id} active={selected.has(`tag:${tag.id}`)} onClick={() => onToggle(`tag:${tag.id}`)} hue={tag.hue} count={tag.count}>
+          {tag.name}
         </Chip>
       ))}
       <button
@@ -83,12 +53,12 @@ export function TypeFilter({
         className="inline-flex h-8 items-center gap-1.5 rounded-full border border-dashed border-line px-3 text-[12px] text-mute transition-colors hover:border-signal hover:text-signal"
       >
         <Settings2 className="size-3.5" />
-        Coleções
+        {t("collections.filter.manage")}
       </button>
       {genres.length > 0 && <span className="mx-1 h-5 w-px bg-line" aria-hidden />}
       {visibleGenres.map((g) => (
         <Chip key={g.name} active={selected.has(`genre:${g.name}`)} onClick={() => onToggle(`genre:${g.name}`)} count={g.count}>
-          {g.name}
+          {genreLabel(g.name)}
         </Chip>
       ))}
       {(hidden > 0 || showAll) && genres.length > GENRES_COLLAPSED && (
@@ -96,7 +66,7 @@ export function TypeFilter({
           onClick={() => setShowAll((v) => !v)}
           className="inline-flex h-8 items-center rounded-full px-2.5 text-[12px] text-signal hover:underline"
         >
-          {showAll ? "Menos" : `+${hidden} gêneros`}
+          {showAll ? t("collections.filter.fewer") : t("collections.filter.moreGenres", { count: hidden })}
         </button>
       )}
       <AnimatePresence>
@@ -108,7 +78,7 @@ export function TypeFilter({
             onClick={onClear}
             className="inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-[12px] text-mute hover:text-ink"
           >
-            <X className="size-3.5" /> Limpar
+            <X className="size-3.5" /> {t("common.actions.clear")}
           </motion.button>
         )}
       </AnimatePresence>
@@ -152,6 +122,7 @@ function Chip({
 
 /** Collection toggles inside the title sheet. */
 export function TitleCollections({ itemKey }: { itemKey: string }) {
+  const { t: tr } = useI18n();
   const qc = useQueryClient();
   const tags = useTags();
   const [managing, setManaging] = useState(false);
@@ -164,7 +135,7 @@ export function TitleCollections({ itemKey }: { itemKey: string }) {
 
   return (
     <div>
-      <h3 className="eyebrow mb-3">Coleções</h3>
+      <h3 className="eyebrow mb-3">{tr("collections.title")}</h3>
       <div className="flex flex-wrap gap-2">
         {(tags.data?.tags ?? []).map((t) => {
           const m = membership.get(t.id);
@@ -172,7 +143,7 @@ export function TitleCollections({ itemKey }: { itemKey: string }) {
             <button
               key={t.id}
               aria-pressed={!!m}
-              title={m?.auto ? `Entrou pelas palavras-chave: ${t.keywords.join(", ")}` : undefined}
+              title={m?.auto ? tr("collections.matchedBy", { keywords: t.keywords.join(", ") }) : undefined}
               onClick={() => set.mutate({ id: t.id, state: m ? (m.auto ? "remove" : "auto") : "add" })}
               className={cx(
                 "inline-flex h-8 items-center gap-2 rounded-full border px-3 text-[13px] transition-colors",
@@ -182,7 +153,7 @@ export function TitleCollections({ itemKey }: { itemKey: string }) {
             >
               {!m && <Plus className="size-3.5" />}
               {t.name}
-              {m?.auto && <span className="data rounded bg-black/20 px-1 text-[9px] uppercase">auto</span>}
+              {m?.auto && <span className="data rounded bg-black/20 px-1 text-[9px] uppercase">{tr("collections.auto")}</span>}
             </button>
           );
         })}
@@ -190,7 +161,7 @@ export function TitleCollections({ itemKey }: { itemKey: string }) {
           onClick={() => setManaging(true)}
           className="inline-flex h-8 items-center gap-1.5 rounded-full px-2 text-[12px] text-mute hover:text-signal"
         >
-          <Settings2 className="size-3.5" /> Gerenciar
+          <Settings2 className="size-3.5" /> {tr("collections.manage")}
         </button>
       </div>
       <ManageCollections open={managing} onClose={() => setManaging(false)} />
@@ -198,9 +169,10 @@ export function TitleCollections({ itemKey }: { itemKey: string }) {
   );
 }
 
-const HUES = [285, 25, 355, 160, 210, 60, 120, 320];
+const HUES = [285, 25, 355, 160, 210, 60, 120, 320] as const;
 
 export function ManageCollections({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t: tr } = useI18n();
   const qc = useQueryClient();
   const toast = useToast();
   const tags = useTags();
@@ -212,7 +184,7 @@ export function ManageCollections({ open, onClose }: { open: boolean; onClose: (
     mutationFn: () => api<TagsResponse>("/tags", { method: "POST", json: { name, keywords: splitKeywords(keywords) } }),
     onSuccess: (data) => {
       onData(data);
-      toast(`Coleção ${name} criada.`);
+      toast(tr("collections.modal.created", { name }));
       setName("");
       setKeywords("");
     },
@@ -235,23 +207,27 @@ export function ManageCollections({ open, onClose }: { open: boolean; onClose: (
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Coleções" wide>
-      <p className="mb-5 text-sm text-mute">
-        Jogos entram sozinhos quando o nome ou a descrição citam uma das palavras-chave. No detalhe de cada jogo você
-        inclui ou tira manualmente.
-      </p>
+    <Modal open={open} onClose={onClose} title={tr("collections.title")} wide>
+      <p className="mb-5 text-sm text-mute">{tr("collections.modal.intro")}</p>
 
       <form onSubmit={submit} className="mb-6 grid gap-3 rounded-2xl border border-line bg-panel p-4 sm:grid-cols-[1fr_1.4fr_auto] sm:items-end">
-        <Field label="Nova coleção">
-          {(id) => <Input id={id} placeholder="Ex.: Favoritos" value={name} onChange={(e) => setName(e.target.value)} />}
-        </Field>
-        <Field label="Palavras-chave (opcional)">
+        <Field label={tr("collections.modal.newLabel")}>
           {(id) => (
-            <Input id={id} placeholder="separe por vírgula" value={keywords} onChange={(e) => setKeywords(e.target.value)} />
+            <Input id={id} placeholder={tr("collections.modal.newPlaceholder")} value={name} onChange={(e) => setName(e.target.value)} />
+          )}
+        </Field>
+        <Field label={tr("collections.modal.keywordsLabel")}>
+          {(id) => (
+            <Input
+              id={id}
+              placeholder={tr("collections.modal.keywordsPlaceholder")}
+              value={keywords}
+              onChange={(e) => setKeywords(e.target.value)}
+            />
           )}
         </Field>
         <Button type="submit" variant="primary" icon={<Plus className="size-4" />} loading={create.isPending} disabled={!name.trim()}>
-          Criar
+          {tr("collections.modal.create")}
         </Button>
       </form>
 
@@ -271,24 +247,24 @@ export function ManageCollections({ open, onClose }: { open: boolean; onClose: (
                   defaultValue={t.name}
                   onBlur={(e) => e.target.value.trim() && e.target.value !== t.name && update.mutate({ id: t.id, name: e.target.value })}
                   className="display-narrow min-w-0 flex-1 rounded-md bg-transparent text-lg focus:outline-none"
-                  aria-label="Nome da coleção"
+                  aria-label={tr("collections.modal.nameLabel")}
                 />
-                <span className="data text-[11px] text-mute">{t.count} jogos</span>
+                <span className="data text-[11px] text-mute">{tr("collections.modal.games", { count: t.count })}</span>
                 <button
                   onClick={() => remove.mutate(t.id)}
-                  aria-label={`Apagar ${t.name}`}
+                  aria-label={tr("collections.modal.delete", { name: t.name })}
                   className="grid size-8 place-items-center rounded-lg text-faint hover:bg-danger-soft hover:text-danger"
                 >
                   <Trash2 className="size-4" />
                 </button>
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Cor">
+              <div className="mt-3 flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label={tr("collections.modal.color")}>
                 {HUES.map((h) => (
                   <button
                     key={h}
                     role="radio"
                     aria-checked={t.hue === h}
-                    aria-label={`Cor ${h}`}
+                    aria-label={tr(`collections.colors.${h}` as const)}
                     onClick={() => update.mutate({ id: t.id, hue: h })}
                     className={cx("size-5 rounded-full transition-transform hover:scale-110", t.hue === h && "ring-2 ring-ink ring-offset-2 ring-offset-raised")}
                     style={{ background: tagColor(h) }}
@@ -298,13 +274,13 @@ export function ManageCollections({ open, onClose }: { open: boolean; onClose: (
               <Input
                 key={t.keywords.join(",")}
                 defaultValue={t.keywords.join(", ")}
-                placeholder="Sem palavras-chave: só entra quem você adicionar"
+                placeholder={tr("collections.modal.noKeywords")}
                 onBlur={(e) => {
                   const next = splitKeywords(e.target.value);
                   if (next.join(",") !== t.keywords.join(",")) update.mutate({ id: t.id, keywords: next });
                 }}
                 className="data mt-3 text-[12px]"
-                aria-label={`Palavras-chave de ${t.name}`}
+                aria-label={tr("collections.modal.keywordsOf", { name: t.name })}
               />
             </motion.li>
           ))}

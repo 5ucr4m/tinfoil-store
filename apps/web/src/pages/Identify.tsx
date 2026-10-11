@@ -6,6 +6,7 @@ import { Link } from "react-router";
 import { LabelArt } from "../components/Cartridge";
 import { ProviderIcon } from "../components/ProviderIcon";
 import { Badge, Button, cx, Input, PageHeader, Spinner, useToast } from "../components/ui";
+import { Trans, useI18n } from "../i18n";
 import { api, type Candidate, type Identification, type PendingFile } from "../lib/api";
 import { bytes, prettyTitle } from "../lib/format";
 
@@ -37,19 +38,7 @@ function initialChoice(i: Identification | null): Choice | null {
   };
 }
 
-const CONFIDENCE = {
-  high: { label: "Alta", tone: "ok" as const },
-  medium: { label: "Média", tone: "pin" as const },
-  low: { label: "Baixa", tone: "danger" as const },
-};
-
-const SOURCE = {
-  name: "já estava no nome",
-  cnmt: "lido de dentro do arquivo",
-  ticket: "lido de dentro do arquivo",
-  fuzzy: "pelo nome do arquivo",
-  none: "sem correspondência",
-};
+const CONFIDENCE_TONE = { high: "ok", medium: "pin", low: "danger" } as const;
 
 interface Done {
   fileId: string;
@@ -60,6 +49,7 @@ interface Done {
 }
 
 export function IdentifyPage() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const toast = useToast();
   const pending = useQuery({ queryKey: ["identify-pending"], queryFn: () => api<{ files: PendingFile[] }>("/identify/pending") });
@@ -118,7 +108,7 @@ export function IdentifyPage() {
       const failed = results.filter((r) => !r.ok) as { fileId: string; error: string }[];
       setDone((d) => [...ok, ...d]);
       setSelected(new Set());
-      if (ok.length) toast(`${ok.length} ${ok.length === 1 ? "arquivo renomeado" : "arquivos renomeados"}.`);
+      if (ok.length) toast(t("identify.renamed", { count: ok.length }));
       for (const f of failed) toast(f.error, "error");
       void qc.invalidateQueries({ queryKey: ["identify-pending"] });
       void qc.invalidateQueries({ queryKey: ["files"] });
@@ -136,16 +126,12 @@ export function IdentifyPage() {
   return (
     <>
       <PageHeader
-        title="Identificar"
-        meta={
-          files.length
-            ? "Arquivos sem title ID no nome. Confira as sugestões e renomeie: o Tinfoil e a biblioteca passam a reconhecer o jogo."
-            : undefined
-        }
+        title={t("identify.title")}
+        meta={files.length ? t("identify.meta") : undefined}
         actions={
           files.length > 0 && (
             <Button icon={<RotateCcw className="size-4" />} loading={run.isPending} onClick={() => run.mutate()}>
-              Analisar de novo
+              {t("identify.reanalyze")}
             </Button>
           )
         }
@@ -160,10 +146,10 @@ export function IdentifyPage() {
           <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-ok-soft text-ok">
             <Check className="size-7" strokeWidth={2.5} />
           </div>
-          <h2 className="display-narrow mt-5 text-2xl">Todos os arquivos estão identificados</h2>
-          <p className="mx-auto mt-2 max-w-md text-mute">Cada arquivo da biblioteca tem um title ID no nome.</p>
+          <h2 className="display-narrow mt-5 text-2xl">{t("identify.allDone.title")}</h2>
+          <p className="mx-auto mt-2 max-w-md text-mute">{t("identify.allDone.body")}</p>
           <Link to="/" className="mt-6 inline-block">
-            <Button>Voltar para a biblioteca</Button>
+            <Button>{t("identify.allDone.back")}</Button>
           </Link>
         </div>
       ) : (
@@ -171,13 +157,13 @@ export function IdentifyPage() {
           <div className="sticky top-14 z-20 -mx-2 mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-paper/90 px-4 py-3 backdrop-blur md:top-3">
             {run.isPending ? (
               <span className="flex items-center gap-2 text-sm text-mute">
-                <ScanSearch className="size-4 animate-pulse text-signal" /> Lendo cabeçalhos e comparando com o titledb…
+                <ScanSearch className="size-4 animate-pulse text-signal" /> {t("identify.analyzing")}
               </span>
             ) : (
               <span className="data flex flex-wrap gap-3 text-[12px] text-mute">
-                <span><b className="text-ok">{counts.high}</b> alta</span>
-                <span><b className="text-pin">{counts.medium}</b> média</span>
-                <span><b className="text-danger">{counts.low}</b> baixa</span>
+                <span><Trans k="identify.counts.high" params={{ count: counts.high }} components={{ b: <b className="text-ok" /> }} /></span>
+                <span><Trans k="identify.counts.medium" params={{ count: counts.medium }} components={{ b: <b className="text-pin" /> }} /></span>
+                <span><Trans k="identify.counts.low" params={{ count: counts.low }} components={{ b: <b className="text-danger" /> }} /></span>
               </span>
             )}
             <div className="ml-auto flex items-center gap-2">
@@ -190,7 +176,7 @@ export function IdentifyPage() {
                   )
                 }
               >
-                {selected.size ? "Limpar seleção" : "Selecionar todos prontos"}
+                {selected.size ? t("identify.selection.clear") : t("identify.selection.selectReady")}
               </Button>
               <Button
                 variant="primary"
@@ -199,7 +185,7 @@ export function IdentifyPage() {
                 loading={apply.isPending}
                 onClick={() => apply.mutate()}
               >
-                Renomear {selectedReady.length || ""}
+                {t("identify.rename", { count: selectedReady.length || "" }).trim()}
               </Button>
             </div>
           </div>
@@ -245,6 +231,7 @@ function Row({
   selected: boolean;
   toggle: () => void;
 }) {
+  const { t } = useI18n();
   const [picking, setPicking] = useState(false);
   const ident = file.identification;
   const ext = file.name.match(/\.[^.]+$/)?.[0] ?? ".nsp";
@@ -258,7 +245,7 @@ function Row({
     staleTime: Infinity,
   });
   const needsVersion = choice?.kind === "update" && choice.version == null;
-  const conf = ident ? CONFIDENCE[ident.confidence] : null;
+  const conf = ident ? { label: t(`identify.confidence.${ident.confidence}`), tone: CONFIDENCE_TONE[ident.confidence] } : null;
 
   return (
     <motion.li layout className={cx("rounded-2xl border bg-raised p-4 transition-colors", selected ? "border-signal/60" : "border-line")}>
@@ -268,7 +255,7 @@ function Row({
           checked={selected}
           onChange={toggle}
           disabled={!choice}
-          aria-label={`Selecionar ${file.name}`}
+          aria-label={t("identify.row.select", { name: file.name })}
           className="mt-1 size-4 shrink-0 accent-[var(--signal)]"
         />
         <div className="min-w-0 flex-1">
@@ -294,8 +281,8 @@ function Row({
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate text-sm font-medium">{prettyTitle(choice.name)}</p>
                     {conf && ident?.titleId === choice.titleId && <Badge tone={conf.tone}>{conf.label}</Badge>}
-                    {ident && ident.titleId === choice.titleId && <span className="text-[11px] text-mute">{SOURCE[ident.source]}</span>}
-                    {ident && ident.titleId !== choice.titleId && <Badge tone="signal">escolhido por você</Badge>}
+                    {ident && ident.titleId === choice.titleId && <span className="text-[11px] text-mute">{t(`identify.source.${ident.source}`)}</span>}
+                    {ident && ident.titleId !== choice.titleId && <Badge tone="signal">{t("identify.row.pickedByYou")}</Badge>}
                   </div>
                   <p className="data mt-1 truncate text-[11px] text-ink/70" title={preview.data?.name}>
                     {preview.data?.name ?? "…"}
@@ -304,18 +291,18 @@ function Row({
               </>
             ) : (
               <p className="flex-1 text-sm text-mute">
-                {ident ? "Nenhuma correspondência confiável. Escolha o jogo manualmente." : "Ainda não analisado."}
+                {ident ? t("identify.row.noMatch") : t("identify.row.notAnalyzed")}
               </p>
             )}
             <Button size="sm" variant="ghost" onClick={() => setPicking((v) => !v)} aria-expanded={picking}>
-              {choice ? "Trocar" : "Escolher"} <ChevronDown className={cx("size-3.5 transition-transform", picking && "rotate-180")} />
+              {choice ? t("identify.row.change") : t("identify.row.choose")} <ChevronDown className={cx("size-3.5 transition-transform", picking && "rotate-180")} />
             </Button>
           </div>
 
           {/* Game vs update, version */}
           {choice && choice.kind !== "dlc" && (
             <div className="mt-3 flex flex-wrap items-center gap-3 pl-7">
-              <div className="flex rounded-lg border border-line bg-panel p-0.5 text-[12px]" role="radiogroup" aria-label="Tipo do arquivo">
+              <div className="flex rounded-lg border border-line bg-panel p-0.5 text-[12px]" role="radiogroup" aria-label={t("identify.row.fileType")}>
                 {(["base", "update"] as const).map((k) => (
                   <button
                     key={k}
@@ -331,26 +318,28 @@ function Row({
                     }
                     className={cx("rounded-md px-2.5 py-1", choice.kind === k ? "bg-raised font-medium shadow-card" : "text-mute")}
                   >
-                    {k === "base" ? "Jogo base" : "Atualização"}
+                    {k === "base" ? t("identify.row.base") : t("identify.row.update")}
                   </button>
                 ))}
               </div>
               {choice.kind === "update" && (
                 <label className="flex items-center gap-2 text-[12px]">
-                  <span className={needsVersion ? "text-danger" : "text-mute"}>Versão</span>
+                  <span className={needsVersion ? "text-danger" : "text-mute"}>{t("identify.row.version")}</span>
                   <Input
                     type="number"
                     min={65536}
                     step={65536}
-                    placeholder="ex.: 196608"
+                    placeholder={t("identify.row.versionPlaceholder")}
                     value={choice.version ?? ""}
                     onChange={(e) => setChoice({ ...choice, version: e.target.value ? Number(e.target.value) : null })}
                     className="data h-8 w-32 text-[12px]"
                   />
                   {choice.version ? (
-                    <span className="data text-[11px] text-mute">= atualização {Math.round(choice.version / 65536)}</span>
+                    <span className="data text-[11px] text-mute">
+                      {t("identify.row.versionIs", { number: Math.round(choice.version / 65536) })}
+                    </span>
                   ) : (
-                    <span className="text-[11px] text-mute">cada atualização soma 65536</span>
+                    <span className="text-[11px] text-mute">{t("identify.row.versionHint")}</span>
                   )}
                 </label>
               )}
@@ -391,11 +380,12 @@ function Row({
 }
 
 function Picker({ initial, fileName, onPick }: { initial: Candidate[]; fileName: string; onPick: (c: Candidate) => void }) {
+  const { t } = useI18n();
   const [q, setQ] = useState("");
   const [debounced, setDebounced] = useState("");
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(q.trim()), 250);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setDebounced(q.trim()), 250);
+    return () => clearTimeout(timer);
   }, [q]);
   const search = useQuery({
     queryKey: ["identify-search", debounced],
@@ -412,15 +402,15 @@ function Picker({ initial, fileName, onPick }: { initial: Candidate[]; fileName:
           autoFocus
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder={`Buscar no titledb (ex.: ${fileName.replace(/\.[^.]+$/, "").slice(0, 24)})`}
+          placeholder={t("identify.picker.placeholder", { example: fileName.replace(/\.[^.]+$/, "").slice(0, 24) })}
           className="pl-9"
-          aria-label="Buscar jogo"
+          aria-label={t("identify.picker.label")}
         />
       </div>
       <ul className="mt-2 flex max-h-72 flex-col overflow-y-auto">
         {list.length === 0 && (
           <li className="px-2 py-4 text-center text-[13px] text-mute">
-            {search.isFetching ? "Buscando…" : "Nada encontrado. Tente outras palavras."}
+            {search.isFetching ? t("identify.picker.searching") : t("identify.picker.empty")}
           </li>
         )}
         {list.map((c) => (
@@ -435,7 +425,7 @@ function Picker({ initial, fileName, onPick }: { initial: Candidate[]; fileName:
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13px]">{prettyTitle(c.name)}</p>
                 <p className="data text-[10px] text-mute">
-                  {c.titleId} · {c.kind === "dlc" ? "DLC" : "jogo"}
+                  {c.titleId} · {c.kind === "dlc" ? t("identify.picker.dlc") : t("identify.picker.game")}
                 </p>
               </div>
               <span className="data shrink-0 text-[11px] text-mute">{Math.round(c.score * 100)}%</span>
@@ -448,13 +438,14 @@ function Picker({ initial, fileName, onPick }: { initial: Candidate[]; fileName:
 }
 
 function DoneList({ done, setDone }: { done: Done[]; setDone: (fn: (d: Done[]) => Done[]) => void }) {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const toast = useToast();
   const undo = useMutation({
     mutationFn: (d: Done) => api(`/identify/undo/${d.renameId}`, { method: "POST" }),
     onSuccess: (_, d) => {
       setDone((list) => list.map((x) => (x.renameId === d.renameId ? { ...x, undone: true } : x)));
-      toast(`Nome original de volta: ${d.oldName}`);
+      toast(t("identify.done.restored", { name: d.oldName }));
       void qc.invalidateQueries({ queryKey: ["identify-pending"] });
       void qc.invalidateQueries({ queryKey: ["files"] });
     },
@@ -464,7 +455,7 @@ function DoneList({ done, setDone }: { done: Done[]; setDone: (fn: (d: Done[]) =
   return (
     <section className="mb-6 rounded-2xl border border-line bg-panel p-4">
       <h2 className="eyebrow mb-3 flex items-center gap-2">
-        <FileSearch className="size-3.5" /> Renomeados agora
+        <FileSearch className="size-3.5" /> {t("identify.done.title")}
       </h2>
       <ul className="flex flex-col gap-1.5">
         <AnimatePresence initial={false}>
@@ -485,7 +476,7 @@ function DoneList({ done, setDone }: { done: Done[]; setDone: (fn: (d: Done[]) =
                   className="inline-flex shrink-0 items-center gap-1 text-mute hover:text-ink"
                   disabled={undo.isPending}
                 >
-                  <Undo2 className="size-3.5" /> Desfazer
+                  <Undo2 className="size-3.5" /> {t("identify.done.undo")}
                 </button>
               )}
             </motion.li>

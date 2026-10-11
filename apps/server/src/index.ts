@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { env } from "./env";
-import { errorMessage } from "./http";
+import { fail, failWith } from "./http";
 import { syncAll } from "./library";
 import { accessRoutes } from "./routes/access";
 import { authRoutes, requireAdmin } from "./routes/auth";
@@ -28,7 +28,7 @@ const app = new Hono({
 
 app.onError((err, c) => {
   console.error(err);
-  return c.json({ error: errorMessage(err) }, 500);
+  return failWith(c, err, 500);
 });
 
 app.get("/healthz", (c) => c.json({ ok: true }));
@@ -46,9 +46,9 @@ api.route("/tags", tagRoutes);
 api.route("/identify", identifyRoutes);
 api.route("/access", accessRoutes);
 app.route("/api", api);
-app.all("/api/*", (c) => c.json({ error: "Rota não encontrada." }, 404));
+app.all("/api/*", (c) => fail(c, "errors.routeNotFound", 404));
 // Never answer store requests with the panel's HTML: Tinfoil would list its assets as games.
-app.all("/tinfoil/*", (c) => c.json({ error: "Caminho da store não encontrado. Use /tinfoil." }, 404));
+app.all("/tinfoil/*", (c) => fail(c, "errors.storePathNotFound", 404));
 
 if (existsSync(env.webDist)) {
   const indexHtml = readFileSync(join(env.webDist, "index.html"), "utf8");

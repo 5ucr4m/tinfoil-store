@@ -3,6 +3,7 @@ import { mkdir, readdir, rename, rm, stat, statfs, writeFile } from "node:fs/pro
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { AppError } from "../i18n";
 import { isGameFile } from "../titles";
 import type { Driver, RemoteFile } from "./types";
 
@@ -22,7 +23,7 @@ export class LocalDriver implements Driver {
 
   private safe(rel: string) {
     const full = resolve(this.root, rel);
-    if (full !== this.root && !full.startsWith(this.root + sep)) throw new Error("Caminho inválido");
+    if (full !== this.root && !full.startsWith(this.root + sep)) throw new AppError("errors.invalidPath");
     return full;
   }
 
@@ -112,7 +113,7 @@ export class LocalDriver implements Driver {
   async completeUpload(ref: { uploadId: string; name: string; size: number }) {
     const tmp = this.tmpPath(ref.uploadId);
     const size = (await stat(tmp)).size;
-    if (size !== ref.size) throw new Error(`Upload incompleto: ${size} de ${ref.size} bytes`);
+    if (size !== ref.size) throw new AppError("errors.uploadIncomplete", { received: size, expected: ref.size });
 
     let name = basename(ref.name);
     let target = this.safe(name);

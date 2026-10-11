@@ -2,11 +2,14 @@ import { motion } from "motion/react";
 import { ArrowRight } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Pins } from "../components/Cartridge";
+import { LanguageSwitch } from "../components/LanguageSwitch";
 import { Wordmark } from "../components/Shell";
 import { Button, Field, Input } from "../components/ui";
+import { useI18n } from "../i18n";
 import { api } from "../lib/api";
 
 export function AuthPage({ setup, onDone }: { setup: boolean; onDone: () => void }) {
+  const { t } = useI18n();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -15,13 +18,13 @@ export function AuthPage({ setup, onDone }: { setup: boolean; onDone: () => void
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (setup && password !== confirm) return setError("As senhas não são iguais.");
+    if (setup && password !== confirm) return setError(t("auth.mismatch"));
     setLoading(true);
     try {
       await api(setup ? "/auth/setup" : "/auth/login", { method: "POST", json: { password } });
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível entrar.");
+      setError(err instanceof Error ? err.message : t("auth.failed"));
     } finally {
       setLoading(false);
     }
@@ -33,6 +36,7 @@ export function AuthPage({ setup, onDone }: { setup: boolean; onDone: () => void
   return (
     <div className="board relative grid min-h-dvh place-items-center overflow-hidden px-4 py-10">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,var(--paper)_70%)]" />
+      <LanguageSwitch variant="compact" className="absolute top-4 right-4 z-10" />
       <motion.div
         initial={{ opacity: 0, y: 24, rotate: -1.5 }}
         animate={{ opacity: 1, y: 0, rotate: 0 }}
@@ -48,14 +52,12 @@ export function AuthPage({ setup, onDone }: { setup: boolean; onDone: () => void
           </div>
           <form onSubmit={submit} className="rounded-[14px] bg-raised p-6 sm:p-7">
             <Wordmark />
-            <h1 className="display-narrow mt-8 text-[28px]">{setup ? "Crie a senha do painel" : "Entrar no painel"}</h1>
+            <h1 className="display-narrow mt-8 text-[28px]">{setup ? t("auth.setupTitle") : t("auth.loginTitle")}</h1>
             <p className="mt-2 text-sm text-mute">
-              {setup
-                ? "Essa senha protege a sua biblioteca e as integrações. O Tinfoil usa outros usuários, que você cria depois."
-                : "Use a senha que você definiu na primeira vez."}
+              {setup ? t("auth.setupBody") : t("auth.loginBody")}
             </p>
             <div className="mt-6 flex flex-col gap-4">
-              <Field label="Senha">
+              <Field label={t("auth.password")}>
                 {(id) => (
                   <Input
                     id={id}
@@ -70,7 +72,7 @@ export function AuthPage({ setup, onDone }: { setup: boolean; onDone: () => void
                 )}
               </Field>
               {setup && (
-                <Field label="Repita a senha" hint="Pelo menos 8 caracteres.">
+                <Field label={t("auth.repeat")} hint={t("auth.repeatHint")}>
                   {(id) => (
                     <Input
                       id={id}
@@ -89,7 +91,7 @@ export function AuthPage({ setup, onDone }: { setup: boolean; onDone: () => void
                 </motion.p>
               )}
               <Button type="submit" variant="primary" loading={loading} className="mt-1 h-11">
-                {setup ? "Criar senha e entrar" : "Entrar"}
+                {setup ? t("auth.submitSetup") : t("auth.submitLogin")}
                 {!loading && <ArrowRight className="size-4" />}
               </Button>
             </div>

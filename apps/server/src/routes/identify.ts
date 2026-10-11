@@ -4,7 +4,8 @@ import { z } from "zod";
 import { newId } from "../crypto";
 import { db } from "../db";
 import { driverFor, getIntegration } from "../drivers";
-import { errorMessage } from "../http";
+import { errorMessage, fail, failIssue, failWith } from "../http";
+import { AppError, localeOf } from "../i18n";
 import {
   buildFileName,
   identifyName,
@@ -48,9 +49,9 @@ const saveResult = db.prepare(
 /** Renames one library file on its provider and updates the row. Returns the new name. */
 async function renameFile(fileId: string, newName: string) {
   const file = db.prepare("SELECT * FROM files WHERE id = ?").get(fileId) as FileRow | undefined;
-  if (!file) throw new Error("Arquivo não encontrado.");
+  if (!file) throw new AppError("errors.fileNotFound", undefined, 404);
   const integration = getIntegration(file.integration_id);
-  if (!integration) throw new Error("Destino do arquivo foi removido.");
+  if (!integration) throw new AppError("errors.fileDestinationRemoved");
   if (file.name === newName) return { file, oldName: file.name };
 
   const remoteId = await driverFor(integration).rename(file.remote_id, newName, file.size);
@@ -68,7 +69,7 @@ const applySchema = z.object({
     .array(
       z.object({
         fileId: z.string(),
-        titleId: z.string().regex(/^[0-9A-Fa-f]{16}$/, "Title ID inválido"),
+        titleId: z.string().regex(/^[0-9A-Fa-f]{16}$/, "errors.titleIdInvalid"),
         version: z.number().int().nonnegative().nullable().optional(),
       }),
     )
@@ -104,7 +105,7 @@ export const identifyRoutes = new Hono()
       name?: string;
       header?: { titleId: string | null; version: number | null; source: "cnmt" | "ticket" | null };
     };
-    if (!body.name) return c.json({ error: "Informe o nome do arquivo." }, 400);
+    if (!body.name) return fail(c, "errors.fileNameRequired");
     return c.json(identifyName(body.name, body.header));
   })
   .get("/search", (c) => {
@@ -115,21 +116,22 @@ export const identifyRoutes = new Hono()
   /** Name a title ID + version would get, for the manual picker. */
   .get("/name", (c) => {
     const titleId = (c.req.query("titleId") ?? "").toUpperCase();
-    if (!/^[0-9A-F]{16}$/.test(titleId)) return c.json({ error: "Title ID inválido." }, 400);
+    if (!/^[0-9A-F]{16}$/.test(titleId)) return fail(c, "errors.titleIdInvalid");
     const version = c.req.query("version");
     const ext = c.req.query("ext") ?? ".nsp";
     return c.json({ name: buildFileName(titleId, version ? Number(version) : null, ext) });
   })
   .post("/apply", async (c) => {
     const parsed = applySchema.safeParse(await c.req.json());
-    if (!parsed.success) return c.json({ error: parsed.error.issues[0].message }, 400);
+    if (!parsed.success) return failIssue(c, parsed.error.issues);
+    const locale = localeOf(c);
     const results = [];
     for (const item of parsed.data.items) {
       try {
         const file = db.prepare("SELECT name FROM files WHERE id = ?").get(item.fileId) as { name: string } | undefined;
-        if (!file) throw new Error("Arquivo não encontrado.");
+        if (!file) throw new AppError("errors.fileNotFound");
         const kind = parseFileName(`[${item.titleId}]`).kind;
-        if (kind === "update" && item.version == null) throw new Error("Informe a versão da atualização.");
+        if (kind === "update" && item.version == null) throw new AppError("errors.updateVersionRequired");
         const target = buildFileName(item.titleId.toUpperCase(), item.version ?? null, extname(file.name));
         const { file: renamed, oldName } = await renameFile(item.fileId, target);
         const renameId = newId();
@@ -143,7 +145,7 @@ export const identifyRoutes = new Hono()
         db.prepare("DELETE FROM identifications WHERE file_id = ?").run(item.fileId);
         results.push({ fileId: item.fileId, ok: true, oldName, newName: renamed.name, renameId });
       } catch (err) {
-        results.push({ fileId: item.fileId, ok: false, error: errorMessage(err) });
+        results.push({ fileId: item.fileId, ok: false, error: errorMessage(err, locale) });
       }
     }
     return c.json({ results });
@@ -152,13 +154,13 @@ export const identifyRoutes = new Hono()
     const rename = db.prepare("SELECT * FROM renames WHERE id = ? AND undone = 0").get(c.req.param("renameId")) as
       | { id: string; file_id: string; old_name: string }
       | undefined;
-    if (!rename) return c.json({ error: "Nada para desfazer." }, 404);
+    if (!rename) return fail(c, "errors.nothingToUndo", 404);
     try {
       const { file } = await renameFile(rename.file_id, rename.old_name);
       db.prepare("UPDATE renames SET undone = 1 WHERE id = ?").run(rename.id);
       return c.json({ ok: true, name: file.name });
     } catch (err) {
-      return c.json({ error: errorMessage(err) }, 502);
+      return failWith(c, err, 502);
     }
   })
   .get("/history", (c) =>

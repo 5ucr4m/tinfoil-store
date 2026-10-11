@@ -1,0 +1,54 @@
+import type { Messages } from "../..";
+import type en from "../en/common";
+
+const common: Messages<typeof en> = {
+  actions: {
+    cancel: "Cancelar",
+    close: "Cerrar",
+    copy: "Copiar {label}",
+    copyValue: "Copiar valor",
+    show: "Mostrar",
+    download: "Descargar",
+    clear: "Limpiar",
+  },
+  kind: { base: "Juego", update: "Actualización", dlc: "DLC", unknown: "Sin ID" },
+  provider: { gdrive: "Google Drive", s3: "Compatible con S3", local: "Carpeta del servidor" },
+  version: { patch: "v{version} · actualización {number}" },
+  time: { never: "nunca" },
+  theme: { label: "Tema", light: "Tema claro", system: "Seguir el sistema", dark: "Tema oscuro" },
+  language: { label: "Idioma" },
+  errors: {
+    generic: "La solicitud falló ({status}).",
+  },
+  genres: {
+    Action: "Acción",
+    Adventure: "Aventura",
+    RPG: "RPG",
+    "Role-Playing": "RPG",
+    Sports: "Deportes",
+    Racing: "Carreras",
+    Puzzle: "Puzle",
+    Platformer: "Plataformas",
+    Shooter: "Disparos",
+    Fighting: "Lucha",
+    Simulation: "Simulación",
+    Strategy: "Estrategia",
+    Party: "Party",
+    Music: "Música",
+    Arcade: "Arcade",
+    Education: "Educativo",
+    Lifestyle: "Estilo de vida",
+    Training: "Entrenamiento",
+    Fitness: "Fitness",
+    "Board Game": "Juego de mesa",
+    Communication: "Comunicación",
+    Study: "Estudio",
+    Utility: "Utilidades",
+    Practical: "Utilidades",
+    Video: "Vídeo",
+    Multiplayer: "Multijugador",
+    Other: "Otros",
+  },
+};
+
+export default common;

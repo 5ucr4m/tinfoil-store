@@ -1,11 +1,17 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { db } from "../db";
 import { driverFor, getIntegration } from "../drivers";
-import { errorMessage } from "../http";
+import { errorMessage, fail, failWith } from "../http";
+import { localeOf, readStored } from "../i18n";
 import { lookupTitles, refreshTitleDb, titleDbStatus } from "../titles";
-import { serveFile } from "./store";
 import { listTransfers, startMove } from "../transfer";
-import { errorMessage as message } from "../http";
+import { serveFile } from "./store";
+
+/** titledb status with its error in the request's language. */
+function titleStatus(c: Context) {
+  const { errorStored, ...status } = titleDbStatus();
+  return { ...status, error: readStored(localeOf(c), errorStored) ?? status.error };
+}
 
 export const fileRoutes = new Hono()
   .get("/", (c) => {
@@ -38,27 +44,27 @@ export const fileRoutes = new Hono()
     return c.json(totals);
   })
   .on(["GET", "HEAD"], "/:id/download", serveFile)
-  .get("/transfers", (c) => c.json({ transfers: listTransfers() }))
+  .get("/transfers", (c) => c.json({ transfers: listTransfers(localeOf(c)) }))
   .post("/:id/move", async (c) => {
     const { integrationId, mode } = (await c.req.json()) as { integrationId?: string; mode?: "move" | "copy" };
-    if (!integrationId) return c.json({ error: "Escolha o destino." }, 400);
+    if (!integrationId) return fail(c, "errors.chooseDestination");
     try {
-      return c.json({ transfer: startMove(c.req.param("id"), integrationId, mode === "copy" ? "copy" : "move") });
+      return c.json({ transfer: startMove(c.req.param("id"), integrationId, mode === "copy" ? "copy" : "move", localeOf(c)) });
     } catch (err) {
-      return c.json({ error: message(err) }, 400);
+      return failWith(c, err, 400);
     }
   })
   .delete("/:id", async (c) => {
     const file = db.prepare("SELECT * FROM files WHERE id = ?").get(c.req.param("id")) as
       | { id: string; integration_id: string; remote_id: string }
       | undefined;
-    if (!file) return c.json({ error: "Arquivo não encontrado." }, 404);
+    if (!file) return fail(c, "errors.fileNotFound", 404);
     if (c.req.query("remote") === "1") {
       const row = getIntegration(file.integration_id);
       try {
         if (row) await driverFor(row).remove(file.remote_id);
       } catch (err) {
-        return c.json({ error: `Não foi possível apagar no provider: ${errorMessage(err)}` }, 502);
+        return fail(c, "errors.providerDeleteFailed", 502, { detail: errorMessage(err, localeOf(c)) });
       }
     }
     db.prepare("DELETE FROM files WHERE id = ?").run(file.id);
@@ -70,7 +76,7 @@ export const titleRoutes = new Hono()
     const ids = (c.req.query("ids") ?? "").split(",").filter((id) => /^[0-9A-Fa-f]{16}$/.test(id));
     return c.json({ titles: lookupTitles(ids.slice(0, 200)) });
   })
-  .get("/status", (c) => c.json(titleDbStatus()))
+  .get("/status", (c) => c.json(titleStatus(c)))
   .get("/:id/details", (c) => {
     const row = db
       .prepare(
@@ -100,5 +106,5 @@ export const titleRoutes = new Hono()
   })
   .post("/refresh", (c) => {
     void refreshTitleDb();
-    return c.json({ ...titleDbStatus(), state: "running" });
+    return c.json({ ...titleStatus(c), state: "running" });
   });

@@ -8,11 +8,12 @@ import { Cartridge, LabelArt } from "../components/Cartridge";
 import { useContextMenu, type MenuItem } from "../components/ContextMenu";
 import { ProviderIcon as Provider } from "../components/ProviderIcon";
 import { MoveTargets, TransferProgress, useDestinations, useMove, useTransfers } from "../components/Transfers";
-import { genreLabel, ManageCollections, TitleCollections, TypeFilter, useTags, type TypeKey } from "../components/Collections";
+import { ManageCollections, TitleCollections, TypeFilter, useTags, type TypeKey } from "../components/Collections";
 import { ProviderIcon } from "../components/ProviderIcon";
 import { Badge, Button, cx, Input, Modal, PageHeader, Select, Sheet, useToast } from "../components/ui";
+import { Trans, useI18n } from "../i18n";
 import { api, type Integration, type Kind, type LibraryFile, type PendingFile, type TagsResponse } from "../lib/api";
-import { bytes, cleanName, KIND_LABEL, prettyTitle, versionLabel } from "../lib/format";
+import { bytes, cleanName, genreLabel, kindLabel, prettyTitle, versionLabel } from "../lib/format";
 
 interface Group {
   key: string;
@@ -41,6 +42,9 @@ interface Item {
 }
 
 const itemKey = (f: { name: string; size: number }) => `${f.name}|${f.size}`;
+
+// titledb uses several names for the same eShop genre; groups keep one canonical name.
+const GENRE_SYNONYMS: Record<string, string> = { Practical: "Utility", "Role-Playing": "RPG" };
 
 function groupFiles(files: LibraryFile[]): Group[] {
   const map = new Map<string, Group>();
@@ -73,8 +77,8 @@ function groupFiles(files: LibraryFile[]): Group[] {
     }
     g.latest = Math.max(g.latest, f.createdAt);
     g.kinds.add(f.kind);
-    // Stored as Portuguese labels, so titledb synonyms ("Utility"/"Practical") merge.
-    for (const c of f.categories ?? []) g.genres.add(genreLabel(c));
+    // Canonical titledb names: labels are translated at render time, so a language switch relabels instantly.
+    for (const c of f.categories ?? []) g.genres.add(GENRE_SYNONYMS[c] ?? c);
   }
   for (const g of map.values()) {
     const base = g.files.find((f) => f.kind === "base") ?? g.files[0];
@@ -83,15 +87,10 @@ function groupFiles(files: LibraryFile[]): Group[] {
   return [...map.values()];
 }
 
-const FILTERS: { value: "all" | Kind; label: string }[] = [
-  { value: "all", label: "Tudo" },
-  { value: "base", label: "Jogos" },
-  { value: "update", label: "Atualizações" },
-  { value: "dlc", label: "DLCs" },
-  { value: "unknown", label: "Sem ID" },
-];
+const FILTERS: ("all" | Kind)[] = ["all", "base", "update", "dlc", "unknown"];
 
 export function LibraryPage() {
+  const { t, locale } = useI18n();
   const files = useQuery({ queryKey: ["files"], queryFn: () => api<{ files: LibraryFile[] }>("/files") });
   const integrations = useQuery({
     queryKey: ["integrations"],
@@ -125,19 +124,19 @@ export function LibraryPage() {
     return groups
       .filter((g) => filter === "all" || g.kinds.has(filter))
       .filter((g) => provider === "all" || g.files.some((f) => f.integrationId === provider))
-      // Types combine with OR: "Metroidvania or Esportes" shows both.
+      // Types combine with OR: "Metroidvania or Sports" shows both.
       .filter(
         (g) =>
           types.size === 0 ||
-          [...types].some((t) =>
-            t.startsWith("tag:") ? memberships[g.key]?.some((m) => m.id === t.slice(4)) : g.genres.has(t.slice(6)),
+          [...types].some((type) =>
+            type.startsWith("tag:") ? memberships[g.key]?.some((m) => m.id === type.slice(4)) : g.genres.has(type.slice(6)),
           ),
       )
       .filter((g) => !q || g.title.toLowerCase().includes(q) || g.baseId?.toLowerCase().includes(q) || g.files.some((f) => f.name.toLowerCase().includes(q)))
       .sort((a, b) =>
-        sort === "name" ? a.title.localeCompare(b.title, "pt-BR") : sort === "size" ? b.size - a.size : b.latest - a.latest,
+        sort === "name" ? a.title.localeCompare(b.title, locale) : sort === "size" ? b.size - a.size : b.latest - a.latest,
       );
-  }, [groups, filter, provider, query, sort, types, memberships]);
+  }, [groups, filter, provider, query, sort, types, memberships, locale]);
 
   const genres = useMemo(() => {
     const counts = new Map<string, number>();
@@ -162,20 +161,21 @@ export function LibraryPage() {
   return (
     <>
       <PageHeader
-        title="Biblioteca"
+        title={t("library.title")}
         meta={
           files.isSuccess && !isEmpty ? (
             <span className="data text-[12px]">
-              {groups.length} {groups.length === 1 ? "título" : "títulos"} · {files.data.files.length} arquivos · {bytes(total)}
-              {providers.length > 1 && ` · ${providers.length} destinos`}
+              {t("library.meta.titles", { count: groups.length })} · {t("library.meta.files", { count: files.data.files.length })} ·{" "}
+              {bytes(total)}
+              {providers.length > 1 && ` · ${t("library.meta.destinations", { count: providers.length })}`}
             </span>
           ) : null
         }
         actions={
           !isEmpty && (
-            <Link to="/enviar">
+            <Link to="/upload">
               <Button variant="primary" icon={<Upload className="size-4" />}>
-                Enviar arquivos
+                {t("library.uploadFiles")}
               </Button>
             </Link>
           )
@@ -189,21 +189,21 @@ export function LibraryPage() {
           className="mb-6 flex items-center gap-3 overflow-hidden rounded-2xl border border-line bg-panel px-4 py-3 text-sm text-mute"
         >
           <RefreshCw className="size-4 animate-spin text-signal" />
-          Baixando nomes e capas dos jogos (titledb). As capas aparecem quando terminar.
+          {t("library.titledbRunning")}
         </motion.div>
       )}
 
       {unidentified > 0 && (
         <Link
-          to="/identificar"
+          to="/identify"
           className="group mb-6 flex items-center gap-3 rounded-2xl border border-pin/50 bg-pin-dim/60 px-4 py-3 text-sm transition-colors hover:border-pin"
         >
           <ScanSearch className="size-5 shrink-0 text-pin" />
           <span className="min-w-0 flex-1">
-            <b>{unidentified} {unidentified === 1 ? "arquivo sem identificação" : "arquivos sem identificação"}.</b>{" "}
-            <span className="text-mute">Sem title ID no nome, eles ficam sem capa e o Tinfoil pode não reconhecer.</span>
+            <b>{t("library.unidentified.count", { count: unidentified })}</b>{" "}
+            <span className="text-mute">{t("library.unidentified.body")}</span>
           </span>
-          <span className="shrink-0 font-medium text-ink group-hover:underline">Identificar</span>
+          <span className="shrink-0 font-medium text-ink group-hover:underline">{t("library.unidentified.action")}</span>
         </Link>
       )}
 
@@ -217,34 +217,34 @@ export function LibraryPage() {
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar por nome ou title ID"
+                placeholder={t("library.search.placeholder")}
                 className="pl-9"
-                aria-label="Buscar"
+                aria-label={t("library.search.label")}
               />
             </div>
-            <div className="no-scrollbar flex gap-1 overflow-x-auto rounded-xl border border-line bg-panel p-1" role="tablist">
+            <div className="no-scrollbar flex gap-1 overflow-x-auto rounded-xl border border-line bg-panel p-1" role="tablist" aria-label={t("library.filters.label")}>
               {FILTERS.map((f) => (
                 <button
-                  key={f.value}
+                  key={f}
                   role="tab"
-                  aria-selected={filter === f.value}
-                  onClick={() => setFilter(f.value)}
+                  aria-selected={filter === f}
+                  onClick={() => setFilter(f)}
                   className={cx(
                     "relative h-8 shrink-0 rounded-lg px-3 text-[13px] transition-colors",
-                    filter === f.value ? "text-ink" : "text-mute hover:text-ink",
+                    filter === f ? "text-ink" : "text-mute hover:text-ink",
                   )}
                 >
-                  {filter === f.value && (
+                  {filter === f && (
                     <motion.span layoutId="lib-filter" className="absolute inset-0 rounded-lg bg-raised shadow-card" transition={{ type: "spring", stiffness: 500, damping: 38 }} />
                   )}
-                  <span className="relative">{f.label}</span>
+                  <span className="relative">{t(`library.filters.${f}`)}</span>
                 </button>
               ))}
             </div>
             <div className="flex gap-2 lg:ml-auto">
               {providers.length > 1 && (
-                <Select value={provider} onChange={(e) => setProvider(e.target.value)} aria-label="Filtrar por destino">
-                  <option value="all">Todos os destinos</option>
+                <Select value={provider} onChange={(e) => setProvider(e.target.value)} aria-label={t("library.destination.label")}>
+                  <option value="all">{t("library.destination.all")}</option>
                   {providers.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
@@ -252,10 +252,10 @@ export function LibraryPage() {
                   ))}
                 </Select>
               )}
-              <Select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Ordenar">
-                <option value="recent">Recentes</option>
-                <option value="name">A–Z</option>
-                <option value="size">Maiores</option>
+              <Select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label={t("library.sort.label")}>
+                <option value="recent">{t("library.sort.recent")}</option>
+                <option value="name">{t("library.sort.name")}</option>
+                <option value="size">{t("library.sort.size")}</option>
               </Select>
             </div>
           </div>
@@ -278,13 +278,19 @@ export function LibraryPage() {
               ))}
             </Grid>
           ) : visible.length === 0 ? (
-            <p className="py-20 text-center text-sm text-mute">Nada encontrado com esses filtros.</p>
+            <p className="py-20 text-center text-sm text-mute">{t("library.noMatches")}</p>
           ) : (
             <Grid>
                 {visible.map((g, i) => {
                   const updates = g.files.filter((f) => f.kind === "update").length;
                   const dlcs = g.files.filter((f) => f.kind === "dlc").length;
-                  const meta = [bytes(g.size), updates && `${updates} upd`, dlcs && `${dlcs} dlc`].filter(Boolean).join(" · ");
+                  const meta = [
+                    bytes(g.size),
+                    updates && t("library.card.updates", { count: updates }),
+                    dlcs && t("library.card.dlcs", { count: dlcs }),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ");
                   return (
                     // Entry-only animation: exit/layout on 100+ cards stalls the grid when filtering.
                     <motion.div
@@ -303,8 +309,8 @@ export function LibraryPage() {
                         onClick={() => setOpenKey(g.key)}
                         badges={
                           <>
-                            {!g.kinds.has("base") && (g.kinds.has("update") || g.kinds.has("dlc")) && <Badge tone="pin">sem jogo base</Badge>}
-                            {g.items.every((it) => it.replicas.length > 1) && <Badge tone="ok">backup</Badge>}
+                            {!g.kinds.has("base") && (g.kinds.has("update") || g.kinds.has("dlc")) && <Badge tone="pin">{t("library.card.noBase")}</Badge>}
+                            {g.items.every((it) => it.replicas.length > 1) && <Badge tone="ok">{t("library.card.backup")}</Badge>}
                           </>
                         }
                       />
@@ -316,7 +322,7 @@ export function LibraryPage() {
         </>
       )}
 
-      <Sheet open={!!open} onClose={() => setOpenKey(null)} label={open?.title ?? "Detalhes"}>
+      <Sheet open={!!open} onClose={() => setOpenKey(null)} label={open?.title ?? t("library.details")}>
         {open && <TitleDetail group={open} />}
       </Sheet>
       <ManageCollections open={managing} onClose={() => setManaging(false)} />
@@ -335,6 +341,7 @@ function Grid({ children }: { children: React.ReactNode }) {
 }
 
 function EmptyLibrary({ hasProviders }: { hasProviders: boolean }) {
+  const { t } = useI18n();
   return (
     <div className="board relative overflow-hidden rounded-[28px] border border-line px-6 py-16 text-center sm:py-24">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,var(--paper)_75%)]" />
@@ -348,23 +355,19 @@ function EmptyLibrary({ hasProviders }: { hasProviders: boolean }) {
         >
           <div className="size-full rounded-md bg-panel" />
         </motion.div>
-        <h2 className="display-narrow text-3xl">Nenhum jogo na estante</h2>
-        <p className="mt-3 text-mute">
-          {hasProviders
-            ? "Envie seus arquivos .nsp, .nsz ou .xci. Se eles já estão no Drive ou no bucket, sincronize a integração."
-            : "Conecte um destino (Google Drive, bucket S3 ou uma pasta do servidor) e envie seus arquivos."}
-        </p>
+        <h2 className="display-narrow text-3xl">{t("library.empty.title")}</h2>
+        <p className="mt-3 text-mute">{hasProviders ? t("library.empty.withProviders") : t("library.empty.noProviders")}</p>
         <div className="mt-8 flex flex-wrap justify-center gap-2">
           {hasProviders ? (
-            <Link to="/enviar">
+            <Link to="/upload">
               <Button variant="primary" icon={<Upload className="size-4" />}>
-                Enviar arquivos
+                {t("library.uploadFiles")}
               </Button>
             </Link>
           ) : (
-            <Link to="/integracoes">
+            <Link to="/integrations">
               <Button variant="primary" icon={<Plug className="size-4" />}>
-                Conectar um destino
+                {t("library.empty.connect")}
               </Button>
             </Link>
           )}
@@ -375,9 +378,9 @@ function EmptyLibrary({ hasProviders }: { hasProviders: boolean }) {
 }
 
 const ORDER: Kind[] = ["base", "update", "dlc", "unknown"];
-const SECTION_LABEL: Record<Kind, string> = { base: "Jogo base", update: "Atualizações", dlc: "DLCs", unknown: "Arquivos" };
 
 function TitleDetail({ group }: { group: Group }) {
+  const { t } = useI18n();
   const banner = group.banner ?? group.art;
   return (
     <div>
@@ -401,9 +404,9 @@ function TitleDetail({ group }: { group: Group }) {
         </div>
         <h2 className="display mt-5 text-[clamp(1.6rem,4vw,2.2rem)]">{group.title}</h2>
         <p className="data mt-2 text-[12px] text-mute">
-          {group.items.length} {group.items.length === 1 ? "arquivo" : "arquivos"} · {bytes(group.size)}
+          {t("library.detail.files", { count: group.items.length })} · {bytes(group.size)}
           {group.items.some((it) => it.replicas.length > 1) &&
-            ` · ${group.items.filter((it) => it.replicas.length > 1).length} com cópia de backup`}
+            ` · ${t("library.detail.backups", { count: group.items.filter((it) => it.replicas.length > 1).length })}`}
         </p>
 
         <TitleInfoBlock group={group} />
@@ -413,7 +416,7 @@ function TitleDetail({ group }: { group: Group }) {
           <MoveAll group={group} />
           {ORDER.filter((k) => group.items.some((it) => it.kind === k)).map((kind) => (
             <div key={kind}>
-              <h3 className="eyebrow mb-3">{SECTION_LABEL[kind]}</h3>
+              <h3 className="eyebrow mb-3">{t(`library.sections.${kind}`)}</h3>
               <ul className="flex flex-col gap-2">
                 {group.items
                   .filter((it) => it.kind === kind)
@@ -432,6 +435,7 @@ function TitleDetail({ group }: { group: Group }) {
 
 /** Copies the whole title to another provider (backup) or moves it there. */
 function MoveAll({ group }: { group: Group }) {
+  const { t } = useI18n();
   const move = useMove();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -442,7 +446,7 @@ function MoveAll({ group }: { group: Group }) {
   return (
     <div>
       <button onClick={() => setOpen((v) => !v)} aria-expanded={open} className="eyebrow inline-flex items-center gap-2 hover:text-ink">
-        <ArrowRightLeft className="size-3.5" /> Copiar ou mover {group.items.length > 1 ? `os ${group.items.length} arquivos` : "o arquivo"}
+        <ArrowRightLeft className="size-3.5" /> {t("library.detail.copyOrMove", { count: group.items.length })}
       </button>
       <AnimatePresence initial={false}>
         {open && (
@@ -459,7 +463,7 @@ function MoveAll({ group }: { group: Group }) {
                     move.mutate({ fileId: it.replicas[0].id, integrationId: dest.id, mode });
                     n++;
                   }
-                  toast(`${mode === "copy" ? "Copiando" : "Movendo"} ${n} ${n === 1 ? "arquivo" : "arquivos"} para ${dest.name}.`, "info");
+                  toast(t(mode === "copy" ? "library.transfer.copying" : "library.transfer.moving", { count: n, destination: dest.name }), "info");
                   setOpen(false);
                 }}
               />
@@ -472,9 +476,10 @@ function MoveAll({ group }: { group: Group }) {
 }
 
 function ModeSwitch({ mode, setMode }: { mode: "copy" | "move"; setMode: (m: "copy" | "move") => void }) {
+  const { t } = useI18n();
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex w-fit rounded-lg border border-line bg-panel p-0.5 text-[12px]" role="radiogroup" aria-label="Copiar ou mover">
+      <div className="flex w-fit rounded-lg border border-line bg-panel p-0.5 text-[12px]" role="radiogroup" aria-label={t("library.mode.label")}>
         {(["copy", "move"] as const).map((m) => (
           <button
             key={m}
@@ -483,20 +488,19 @@ function ModeSwitch({ mode, setMode }: { mode: "copy" | "move"; setMode: (m: "co
             onClick={() => setMode(m)}
             className={cx("rounded-md px-2.5 py-1", mode === m ? "bg-raised font-medium shadow-card" : "text-mute")}
           >
-            {m === "copy" ? "Copiar (backup)" : "Mover"}
+            {t(m === "copy" ? "library.mode.copy" : "library.mode.move")}
           </button>
         ))}
       </div>
       <p className="text-[12px] text-mute">
-        {mode === "copy"
-          ? "Mantém o original e cria outra cópia. Se um destino falhar, a store usa a cópia."
-          : "Copia para o destino escolhido e apaga do lugar atual."}
+        {t(mode === "copy" ? "library.mode.copyHint" : "library.mode.moveHint")}
       </p>
     </div>
   );
 }
 
 function FileRow({ item }: { item: Item }) {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const toast = useToast();
   const transfers = useTransfers();
@@ -504,7 +508,7 @@ function FileRow({ item }: { item: Item }) {
   const openMenu = useContextMenu();
   const menus = useLibraryMenus();
   const ids = new Set(item.replicas.map((r) => r.id));
-  const transfer = transfers.find((t) => ids.has(t.fileId) && t.state !== "done" && t.state !== "error");
+  const transfer = transfers.find((tr) => ids.has(tr.fileId) && tr.state !== "done" && tr.state !== "error");
   const [panel, setPanel] = useState<"delete" | "move" | null>(null);
   const [mode, setMode] = useState<"copy" | "move">("copy");
   const primary = item.replicas[0];
@@ -516,7 +520,7 @@ function FileRow({ item }: { item: Item }) {
       return files;
     },
     onSuccess: (files) => {
-      toast(files.length > 1 ? "Todas as cópias foram apagadas." : `Cópia em ${files[0].integrationName} apagada.`);
+      toast(files.length > 1 ? t("library.row.allCopiesDeleted") : t("library.row.copyDeleted", { name: files[0].integrationName }));
       setPanel(null);
       void qc.invalidateQueries({ queryKey: ["files"] });
       void qc.invalidateQueries({ queryKey: ["integrations"] });
@@ -552,27 +556,27 @@ function FileRow({ item }: { item: Item }) {
                 {r.integrationName}
               </span>
             ))}
-            {replicated && <Badge tone="ok">backup</Badge>}
-            {item.kind === "unknown" && <Badge tone="pin">{KIND_LABEL.unknown}</Badge>}
+            {replicated && <Badge tone="ok">{t("library.card.backup")}</Badge>}
+            {item.kind === "unknown" && <Badge tone="pin">{kindLabel("unknown")}</Badge>}
           </div>
         </div>
         <button
           onClick={() => setPanel((p) => (p === "move" ? null : "move"))}
           disabled={!!transfer}
           className="grid size-8 shrink-0 place-items-center rounded-lg text-mute transition-colors hover:bg-signal-soft hover:text-signal disabled:opacity-40"
-          aria-label={`Copiar ou mover ${item.name}`}
+          aria-label={t("library.row.copyOrMoveFile", { name: item.name })}
           aria-expanded={panel === "move"}
-          title="Copiar ou mover"
+          title={t("library.row.copyOrMove")}
         >
           <ArrowRightLeft className="size-4" />
         </button>
         <a
           href={`/api/files/${primary.id}/download`}
           download={item.name}
-          onClick={() => toast(`Baixando ${item.name}. Acompanhe pelo navegador.`, "info")}
+          onClick={() => toast(t("library.row.downloading", { name: item.name }), "info")}
           className="-ml-2 grid size-8 shrink-0 place-items-center rounded-lg text-mute transition-colors hover:bg-signal-soft hover:text-signal"
-          aria-label={`Baixar ${item.name}`}
-          title="Baixar"
+          aria-label={t("library.row.downloadFile", { name: item.name })}
+          title={t("common.actions.download")}
         >
           <Download className="size-4" />
         </a>
@@ -580,7 +584,7 @@ function FileRow({ item }: { item: Item }) {
           onClick={() => setPanel((p) => (p === "delete" ? null : "delete"))}
           disabled={!!transfer}
           className="-ml-2 grid size-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-danger-soft hover:text-danger disabled:opacity-40"
-          aria-label={`Apagar ${item.name}`}
+          aria-label={t("library.row.deleteFile", { name: item.name })}
           aria-expanded={panel === "delete"}
         >
           <Trash2 className="size-4" />
@@ -592,7 +596,7 @@ function FileRow({ item }: { item: Item }) {
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
             <div className="mt-3 flex flex-col gap-3 border-t border-line pt-3">
               {replicated ? (
-                <p className="text-[13px] text-mute">Criar outra cópia em:</p>
+                <p className="text-[13px] text-mute">{t("library.row.createCopyIn")}</p>
               ) : (
                 <ModeSwitch mode={mode} setMode={setMode} />
               )}
@@ -612,37 +616,41 @@ function FileRow({ item }: { item: Item }) {
             <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
               {replicated ? (
                 <>
-                  <p className="text-[13px] text-mute">Apagar só uma cópia mantém o jogo disponível pela outra.</p>
+                  <p className="text-[13px] text-mute">{t("library.row.deleteOneHint")}</p>
                   {item.replicas.map((r) => (
                     <div key={r.id} className="flex items-center gap-2 text-[13px]">
                       <ProviderIcon type={r.integrationType} className="size-3.5" />
                       <span className="flex-1">{r.integrationName}</span>
                       <Button size="sm" variant="ghost" disabled={remove.isPending} onClick={() => remove.mutate([r])}>
-                        Apagar esta cópia
+                        {t("library.row.deleteThisCopy")}
                       </Button>
                     </div>
                   ))}
                   <div className="flex justify-end gap-2 pt-1">
                     <Button size="sm" variant="ghost" onClick={() => setPanel(null)}>
-                      Cancelar
+                      {t("common.actions.cancel")}
                     </Button>
                     <Button size="sm" variant="danger" loading={remove.isPending} onClick={() => remove.mutate(item.replicas)}>
-                      Apagar todas as cópias
+                      {t("library.row.deleteAllCopies")}
                     </Button>
                   </div>
                 </>
               ) : (
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="mr-auto text-[13px] text-mute">
-                    {primary.integrationType === "gdrive"
-                      ? "O arquivo vai para a lixeira do Drive."
-                      : `O arquivo será apagado ${primary.integrationType === "s3" ? "do bucket" : "do disco"}.`}
+                    {t(
+                      primary.integrationType === "gdrive"
+                        ? "library.row.trashDrive"
+                        : primary.integrationType === "s3"
+                          ? "library.row.deleteBucket"
+                          : "library.row.deleteDisk",
+                    )}
                   </span>
                   <Button size="sm" variant="ghost" onClick={() => setPanel(null)} disabled={remove.isPending}>
-                    Cancelar
+                    {t("common.actions.cancel")}
                   </Button>
                   <Button size="sm" variant="danger" loading={remove.isPending} onClick={() => remove.mutate([primary])}>
-                    Apagar arquivo
+                    {t("library.row.deleteButton")}
                   </Button>
                 </div>
               )}
@@ -666,6 +674,7 @@ interface TitleDetails {
 
 /** Genres, gameplay screenshots, YouTube shortcut and description from titledb. */
 function TitleInfoBlock({ group }: { group: Group }) {
+  const { t } = useI18n();
   const details = useQuery({
     queryKey: ["title-details", group.baseId],
     queryFn: () => api<TitleDetails>(`/titles/${group.baseId}/details`),
@@ -675,7 +684,8 @@ function TitleInfoBlock({ group }: { group: Group }) {
   const [expanded, setExpanded] = useState(false);
   const [shot, setShot] = useState<number | null>(null);
   const d = details.data;
-  const youtube = `https://www.youtube.com/results?search_query=${encodeURIComponent(`${group.title} nintendo switch gameplay`)}`;
+  const youtubeQuery = `${group.title} nintendo switch gameplay`;
+  const youtube = youtubeUrl(group.title);
   const year = d?.releaseDate?.slice(0, 4);
 
   return (
@@ -688,7 +698,7 @@ function TitleInfoBlock({ group }: { group: Group }) {
         ))}
         {d?.players ? (
           <span className="inline-flex items-center gap-1 rounded-full border border-line bg-raised px-2.5 py-1 text-[12px] text-mute">
-            <Users className="size-3" /> {d.players === 1 ? "1 jogador" : `até ${d.players} jogadores`}
+            <Users className="size-3" /> {t("library.info.players", { count: d.players })}
           </span>
         ) : null}
         {year && <span className="data text-[11px] text-mute">{year}</span>}
@@ -705,21 +715,21 @@ function TitleInfoBlock({ group }: { group: Group }) {
           <Play className="size-4 fill-current" />
         </span>
         <span className="min-w-0">
-          <span className="block text-sm font-medium">Ver gameplay no YouTube</span>
-          <span className="block truncate text-[12px] text-mute">Busca por "{group.title} nintendo switch gameplay"</span>
+          <span className="block text-sm font-medium">{t("library.info.youtube")}</span>
+          <span className="block truncate text-[12px] text-mute">{t("library.info.youtubeHint", { query: youtubeQuery })}</span>
         </span>
       </a>
 
       {d && d.screenshots.length > 0 && (
         <div>
-          <h3 className="eyebrow mb-3">Imagens</h3>
+          <h3 className="eyebrow mb-3">{t("library.info.images")}</h3>
           <div className="no-scrollbar -mx-6 flex snap-x gap-2.5 overflow-x-auto px-6 pb-1">
             {d.screenshots.map((src, i) => (
               <button
                 key={src}
                 onClick={() => setShot(i)}
                 className="aspect-video w-56 shrink-0 snap-start overflow-hidden rounded-xl bg-shell ring-1 ring-line transition-transform hover:scale-[1.02]"
-                aria-label={`Abrir imagem ${i + 1}`}
+                aria-label={t("library.info.openImage", { number: i + 1 })}
               >
                 <img src={src} alt="" loading="lazy" className="size-full object-cover" />
               </button>
@@ -730,13 +740,13 @@ function TitleInfoBlock({ group }: { group: Group }) {
 
       {d?.description && (
         <div>
-          <h3 className="eyebrow mb-2">Sobre</h3>
+          <h3 className="eyebrow mb-2">{t("library.info.about")}</h3>
           <p className={cx("text-sm leading-relaxed whitespace-pre-line text-ink/85", !expanded && "line-clamp-4")}>
             {d.description}
           </p>
           {d.description.length > 280 && (
             <button onClick={() => setExpanded((v) => !v)} className="mt-1.5 text-[13px] text-signal hover:underline">
-              {expanded ? "Mostrar menos" : "Ler mais"}
+              {expanded ? t("library.info.showLess") : t("library.info.readMore")}
             </button>
           )}
         </div>
@@ -748,6 +758,7 @@ function TitleInfoBlock({ group }: { group: Group }) {
 }
 
 function Lightbox({ images, index, onChange }: { images: string[]; index: number; onChange: (i: number | null) => void }) {
+  const { t } = useI18n();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -781,7 +792,7 @@ function Lightbox({ images, index, onChange }: { images: string[]; index: number
           onClick={(e) => e.stopPropagation()}
         />
       </AnimatePresence>
-      <button onClick={() => onChange(null)} aria-label="Fechar" className="absolute top-4 right-4 grid size-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20">
+      <button onClick={() => onChange(null)} aria-label={t("common.actions.close")} className="absolute top-4 right-4 grid size-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20">
         <X className="size-5" />
       </button>
       {images.length > 1 && (
@@ -791,7 +802,7 @@ function Lightbox({ images, index, onChange }: { images: string[]; index: number
               e.stopPropagation();
               onChange((index - 1 + images.length) % images.length);
             }}
-            aria-label="Anterior"
+            aria-label={t("library.lightbox.previous")}
             className="absolute left-4 grid size-11 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
           >
             <ChevronLeft className="size-5" />
@@ -801,7 +812,7 @@ function Lightbox({ images, index, onChange }: { images: string[]; index: number
               e.stopPropagation();
               onChange((index + 1) % images.length);
             }}
-            aria-label="Próxima"
+            aria-label={t("library.lightbox.next")}
             className="absolute right-4 grid size-11 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
           >
             <ChevronRight className="size-5" />
@@ -826,10 +837,9 @@ const startDownload = (file: LibraryFile) => {
 const youtubeUrl = (title: string) =>
   `https://www.youtube.com/results?search_query=${encodeURIComponent(`${title} nintendo switch gameplay`)}`;
 
-const FILE_LABEL: Record<Kind, string> = { base: "Jogo base", update: "Atualização", dlc: "DLC", unknown: "Arquivo" };
-
 /** Right-click menus for cartridges and file rows. */
 function useLibraryMenus() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const toast = useToast();
   const move = useMove();
@@ -840,14 +850,14 @@ function useLibraryMenus() {
   /** Targets for a set of items: destinations that don't already hold all of them. */
   const transferItems = (items: Item[], mode: "copy" | "move"): MenuItem[] => {
     const options = ready.filter((d) => !items.every((it) => it.replicas.some((r) => r.integrationId === d.id)));
-    if (!options.length) return [{ label: "Nenhum outro destino", disabled: true }];
+    if (!options.length) return [{ label: t("library.menu.noDestination"), disabled: true }];
     return options.map((d) => ({
       label: d.name,
       icon: <Provider type={d.type} />,
       onSelect: () => {
         const todo = items.filter((it) => !it.replicas.some((r) => r.integrationId === d.id));
         for (const it of todo) move.mutate({ fileId: it.replicas[0].id, integrationId: d.id, mode });
-        toast(`${mode === "copy" ? "Copiando" : "Movendo"} ${todo.length} ${todo.length === 1 ? "arquivo" : "arquivos"} para ${d.name}.`, "info");
+        toast(t(mode === "copy" ? "library.transfer.copying" : "library.transfer.moving", { count: todo.length, destination: d.name }), "info");
       },
     }));
   };
@@ -863,35 +873,38 @@ function useLibraryMenus() {
     const sorted = [...g.items].sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind) || (b.version ?? 0) - (a.version ?? 0));
     const anyReplicated = g.items.some((it) => it.replicas.length > 1);
     return [
-      { label: "Abrir detalhes", icon: <Eye />, onSelect: actions.open },
+      { label: t("library.menu.open"), icon: <Eye />, onSelect: actions.open },
       sorted.length === 1
-        ? { label: "Baixar", icon: <Download />, hint: bytes(sorted[0].size), onSelect: () => startDownload(sorted[0].replicas[0]) }
+        ? { label: t("common.actions.download"), icon: <Download />, hint: bytes(sorted[0].size), onSelect: () => startDownload(sorted[0].replicas[0]) }
         : {
-            label: "Baixar",
+            label: t("common.actions.download"),
             icon: <Download />,
             submenu: sorted.map((it) => ({
-              label: `${FILE_LABEL[it.kind]}${it.kind === "update" && it.version ? ` v${it.version}` : ""}`,
+              label:
+                it.kind === "update" && it.version
+                  ? t("library.menu.updateVersion", { version: it.version })
+                  : t(`library.menu.fileLabel.${it.kind}`),
               hint: bytes(it.size),
               onSelect: () => startDownload(it.replicas[0]),
             })),
           },
-      { label: "Ver gameplay no YouTube", icon: <Play />, onSelect: () => window.open(youtubeUrl(g.title), "_blank", "noopener") },
+      { label: t("library.info.youtube"), icon: <Play />, onSelect: () => window.open(youtubeUrl(g.title), "_blank", "noopener") },
       { separator: true },
-      { label: "Copiar para (backup)", icon: <CopyPlus />, submenu: transferItems(g.items, "copy") },
-      { label: g.items.length > 1 ? "Mover tudo para" : "Mover para", icon: <FolderInput />, submenu: transferItems(g.items, "move"), disabled: anyReplicated },
+      { label: t("library.menu.copyTo"), icon: <CopyPlus />, submenu: transferItems(g.items, "copy") },
+      { label: g.items.length > 1 ? t("library.menu.moveAllTo") : t("library.menu.moveTo"), icon: <FolderInput />, submenu: transferItems(g.items, "move"), disabled: anyReplicated },
       {
-        label: "Coleções",
+        label: t("library.menu.collections"),
         icon: <Tags />,
-        submenu: (tags?.tags ?? []).map((t) => ({
-          label: t.name,
-          checked: members.has(t.id),
-          hint: members.get(t.id)?.auto ? "auto" : undefined,
-          onSelect: () => void toggleTag(t.id, g.key, members.get(t.id)),
+        submenu: (tags?.tags ?? []).map((tag) => ({
+          label: tag.name,
+          checked: members.has(tag.id),
+          hint: members.get(tag.id)?.auto ? t("library.menu.auto") : undefined,
+          onSelect: () => void toggleTag(tag.id, g.key, members.get(tag.id)),
         })),
       },
       { separator: true },
       {
-        label: g.files.length > 1 ? `Apagar ${g.files.length} arquivos…` : "Apagar arquivo…",
+        label: t("library.menu.deleteFiles", { count: g.files.length }),
         icon: <Trash2 />,
         danger: true,
         onSelect: actions.remove,
@@ -905,13 +918,13 @@ function useLibraryMenus() {
   ): MenuItem[] => {
     const replicated = item.replicas.length > 1;
     return [
-      { label: "Baixar", icon: <Download />, hint: bytes(item.size), onSelect: () => startDownload(item.replicas[0]) },
-      { label: "Copiar para (backup)", icon: <CopyPlus />, submenu: transferItems([item], "copy"), disabled: actions.busy },
-      { label: "Mover para", icon: <FolderInput />, submenu: transferItems([item], "move"), disabled: actions.busy || replicated },
+      { label: t("common.actions.download"), icon: <Download />, hint: bytes(item.size), onSelect: () => startDownload(item.replicas[0]) },
+      { label: t("library.menu.copyTo"), icon: <CopyPlus />, submenu: transferItems([item], "copy"), disabled: actions.busy },
+      { label: t("library.menu.moveTo"), icon: <FolderInput />, submenu: transferItems([item], "move"), disabled: actions.busy || replicated },
       ...(replicated
         ? [
             {
-              label: "Apagar cópia de",
+              label: t("library.menu.deleteCopyFrom"),
               icon: <Trash2 />,
               submenu: item.replicas.map((r) => ({
                 label: r.integrationName,
@@ -922,13 +935,13 @@ function useLibraryMenus() {
           ]
         : []),
       {
-        label: "Copiar nome do arquivo",
+        label: t("library.menu.copyName"),
         icon: <Copy />,
-        onSelect: () => void navigator.clipboard.writeText(item.name).then(() => toast("Nome copiado.")),
+        onSelect: () => void navigator.clipboard.writeText(item.name).then(() => toast(t("library.menu.nameCopied"))),
       },
       { separator: true },
       {
-        label: replicated ? "Apagar todas as cópias…" : "Apagar arquivo…",
+        label: replicated ? t("library.menu.deleteAllCopies") : t("library.menu.deleteFiles", { count: 1 }),
         icon: <Trash2 />,
         danger: true,
         onSelect: actions.remove,
@@ -941,6 +954,7 @@ function useLibraryMenus() {
 }
 
 function ConfirmDelete({ files, onClose }: { files: LibraryFile[] | null; onClose: () => void }) {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const toast = useToast();
   const remove = useMutation({
@@ -957,7 +971,7 @@ function ConfirmDelete({ files, onClose }: { files: LibraryFile[] | null; onClos
     },
     onSuccess: ({ failures, total }) => {
       const ok = total - failures.length;
-      if (ok) toast(`${ok} ${ok === 1 ? "arquivo apagado" : "arquivos apagados"}.`);
+      if (ok) toast(t("library.confirm.deleted", { count: ok }));
       for (const f of failures) toast(f, "error");
       void qc.invalidateQueries({ queryKey: ["files"] });
       void qc.invalidateQueries({ queryKey: ["integrations"] });
@@ -966,10 +980,8 @@ function ConfirmDelete({ files, onClose }: { files: LibraryFile[] | null; onClos
   });
   const list = files ?? [];
   return (
-    <Modal open={!!files} onClose={onClose} title={list.length > 1 ? `Apagar ${list.length} arquivos?` : "Apagar arquivo?"}>
-      <p className="text-sm text-mute">
-        Os arquivos saem do destino onde estão: no Drive vão para a lixeira; no bucket e no disco são apagados de vez.
-      </p>
+    <Modal open={!!files} onClose={onClose} title={t("library.confirm.title", { count: list.length })}>
+      <p className="text-sm text-mute">{t("library.confirm.body")}</p>
       <ul className="mt-4 flex flex-col gap-1.5 rounded-xl border border-line bg-panel p-3">
         {list.map((f) => (
           <li key={f.id} className="flex items-center gap-2 text-[12px]">
@@ -983,10 +995,10 @@ function ConfirmDelete({ files, onClose }: { files: LibraryFile[] | null; onClos
       </ul>
       <div className="mt-6 flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose} disabled={remove.isPending}>
-          Cancelar
+          {t("common.actions.cancel")}
         </Button>
         <Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate(list)}>
-          {list.length > 1 ? `Apagar ${list.length} arquivos` : "Apagar arquivo"}
+          {t("library.confirm.button", { count: list.length })}
         </Button>
       </div>
     </Modal>

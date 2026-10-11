@@ -1,10 +1,12 @@
+import { getLocale, translate } from "../i18n";
+
 const UNITS = ["B", "KB", "MB", "GB", "TB"];
 
 export function bytes(n: number, digits = 1) {
   if (!Number.isFinite(n) || n <= 0) return "0 B";
   const i = Math.min(Math.floor(Math.log(n) / Math.log(1024)), UNITS.length - 1);
   const value = n / 1024 ** i;
-  return `${value.toLocaleString("pt-BR", { maximumFractionDigits: i === 0 ? 0 : digits })} ${UNITS[i]}`;
+  return `${value.toLocaleString(getLocale(), { maximumFractionDigits: i === 0 ? 0 : digits })} ${UNITS[i]}`;
 }
 
 export function duration(seconds: number) {
@@ -15,13 +17,12 @@ export function duration(seconds: number) {
   return `${Math.floor(m / 60)}h ${m % 60}min`;
 }
 
-const rtf = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
-
 export function ago(ts: number | null | undefined) {
-  if (!ts) return "nunca";
+  if (!ts) return translate("common.time.never");
+  const rtf = new Intl.RelativeTimeFormat(getLocale(), { numeric: "auto" });
   const diff = (ts - Date.now()) / 1000;
   const abs = Math.abs(diff);
-  if (abs < 60) return "agora";
+  if (abs < 60) return rtf.format(0, "second");
   if (abs < 3600) return rtf.format(Math.round(diff / 60), "minute");
   if (abs < 86400) return rtf.format(Math.round(diff / 3600), "hour");
   return rtf.format(Math.round(diff / 86400), "day");
@@ -48,7 +49,7 @@ export function prettyTitle(name: string) {
 export function versionLabel(v: number | null) {
   if (v == null) return null;
   // Switch versions step by 65536 per patch.
-  return v === 0 ? "v0" : `v${v} · patch ${Math.round(v / 65536)}`;
+  return v === 0 ? "v0" : translate("common.version.patch", { version: v, number: Math.round(v / 65536) });
 }
 
 const KIND_RE = /\[([0-9a-fA-F]{16})\]/;
@@ -70,4 +71,11 @@ export function parseTitle(name: string) {
   return { titleId, baseId, kind, version: version ? Number(version) : null };
 }
 
-export const KIND_LABEL = { base: "Jogo", update: "Atualização", dlc: "DLC", unknown: "Sem ID" } as const;
+export const kindLabel = (kind: "base" | "update" | "dlc" | "unknown") => translate(`common.kind.${kind}`);
+
+/** eShop genre from titledb, in the current language (unknown genres pass through). */
+export const genreLabel = (genre: string) => {
+  const key = `common.genres.${genre}` as const;
+  const label = translate(key as Parameters<typeof translate>[0]);
+  return label === key ? genre : label;
+};
