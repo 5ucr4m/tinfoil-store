@@ -7,9 +7,10 @@ services:
     expose:
       - "3000"
     environment:
-      # Public address, e.g. https://store.seudominio.com. Goes into the Tinfoil index
-      # and into the Google OAuth redirect URI.
-      PUBLIC_URL: ${PUBLIC_URL:?Defina PUBLIC_URL}
+      # Optional fixed public address (e.g. https://store.example.com). Leave it empty to build
+      # links from each request: the LAN IP for Tinfoil, the tunnel's https domain for the
+      # panel and the Google OAuth redirect.
+      PUBLIC_URL: ${PUBLIC_URL:-}
       # Encrypts integration tokens and signs sessions/download links. Keep it stable:
       # changing it means reconnecting integrations. Generate with: openssl rand -hex 32
       APP_SECRET: ${APP_SECRET:?Defina APP_SECRET}

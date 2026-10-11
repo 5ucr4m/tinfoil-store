@@ -80,7 +80,7 @@ The workflow in `.github/workflows/docker.yml` publishes the image to GitHub Con
 
    | Variable | Required | Description |
    |---|---|---|
-   | `PUBLIC_URL` | yes | Public address, e.g. `https://store.example.com`. Used in the Tinfoil index and the Google OAuth redirect. |
+   | `PUBLIC_URL` | no | Fixed public address, e.g. `https://store.example.com`. Empty (recommended when Tinfoil uses the LAN IP): links follow the address each request used, so the console gets LAN links and the panel opened through a domain or tunnel gets an https OAuth redirect. |
    | `APP_SECRET` | yes | Encrypts integration tokens and signs sessions and links. Generate with `openssl rand -hex 32` and keep it stable. |
    | `GAMES_PATH` | no | Host folder for the "Server folder" destination (writable by UID 1000). Defaults to the `cartucho-games` volume. |
    | `CARTUCHO_TAG` | no | Image tag to run instead of `latest`. |
