@@ -1,0 +1,177 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/*
+  Cartucho tokens.
+  paper/panel/raised: plastic case surfaces, lilac-grey.
+  signal: the one interactive colour. pin: gold contacts, used only for transfer progress.
+*/
+:root {
+  --paper: #e9e8f0;
+  --panel: #f6f5fa;
+  --raised: #ffffff;
+  --ink: #191724;
+  --mute: #6b6880;
+  --faint: #a19eb4;
+  --line: #d6d4e2;
+  --signal: #4a35f0;
+  --signal-soft: #e4e0ff;
+  --signal-ink: #ffffff;
+  --pin: #d89b12;
+  --pin-dim: #e3dccb;
+  --shell: #24222f;
+  --shell-edge: #393648;
+  --ok: #178a5e;
+  --ok-soft: #dcf2e8;
+  --danger: #cf3044;
+  --danger-soft: #fbe2e5;
+  --shadow: 0 1px 0 rgb(255 255 255 / 0.7) inset, 0 1px 2px rgb(25 23 36 / 0.06), 0 8px 24px -12px rgb(25 23 36 / 0.18);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --paper: #0f0e15;
+  --panel: #17161f;
+  --raised: #1f1e2a;
+  --ink: #eeecf7;
+  --mute: #8d89a3;
+  --faint: #5d5a70;
+  --line: #2b2939;
+  --signal: #8f80ff;
+  --signal-soft: #2a2550;
+  --signal-ink: #0f0e15;
+  --pin: #f2b630;
+  --pin-dim: #3a3424;
+  --shell: #2a2836;
+  --shell-edge: #403d52;
+  --ok: #3ccb8e;
+  --ok-soft: #15332a;
+  --danger: #ff6b7d;
+  --danger-soft: #3a1820;
+  --shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 12px 32px -16px rgb(0 0 0 / 0.7);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-panel: var(--panel);
+  --color-raised: var(--raised);
+  --color-ink: var(--ink);
+  --color-mute: var(--mute);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-signal: var(--signal);
+  --color-signal-soft: var(--signal-soft);
+  --color-signal-ink: var(--signal-ink);
+  --color-pin: var(--pin);
+  --color-pin-dim: var(--pin-dim);
+  --color-shell: var(--shell);
+  --color-shell-edge: var(--shell-edge);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+
+  --font-display: "Anybody", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Martian Mono", ui-monospace, monospace;
+
+  --shadow-card: var(--shadow);
+  --ease-snap: cubic-bezier(0.2, 0.9, 0.25, 1.15);
+}
+
+@layer base {
+  html {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    transition: background-color 0.3s ease;
+  }
+  body {
+    min-height: 100dvh;
+    background: var(--paper);
+  }
+  ::selection {
+    background: var(--signal);
+    color: var(--signal-ink);
+  }
+  :focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
+@layer components {
+  /* Display face: wide and heavy, used sparingly for titles. */
+  .display {
+    font-family: var(--font-display);
+    font-variation-settings: "wdth" 140;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 0.95;
+  }
+  .display-narrow {
+    font-family: var(--font-display);
+    font-variation-settings: "wdth" 72;
+    font-weight: 700;
+    letter-spacing: -0.005em;
+    line-height: 1.05;
+  }
+  .data {
+    font-family: var(--font-mono);
+    font-variation-settings: "wdth" 85;
+    font-feature-settings: "tnum";
+    letter-spacing: -0.01em;
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-variation-settings: "wdth" 100;
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--mute);
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  /* Faint grid evoking the PCB under a cartridge label. */
+  .board {
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 24px 24px;
+    background-position: -1px -1px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes pin-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}

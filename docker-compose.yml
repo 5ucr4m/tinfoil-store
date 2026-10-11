@@ -1,0 +1,40 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-3080}:3000"
+    environment:
+      # Optional: fixed URL used in the Tinfoil index and the Google OAuth redirect.
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      # Optional: generated into /data/secret.key when empty. Keep it stable.
+      APP_SECRET: ${APP_SECRET:-}
+    volumes:
+      - cartucho-data:/data
+      - ./games:/data/games
+
+  # Local S3 for testing the bucket driver: docker compose --profile s3 up
+  minio:
+    image: minio/minio:latest
+    profiles: ["s3"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: cartucho
+      MINIO_ROOT_PASSWORD: cartucho-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    profiles: ["s3"]
+    depends_on: [minio]
+    entrypoint: >
+      sh -c "until mc alias set local http://minio:9000 cartucho cartucho-secret; do sleep 1; done;
+             mc mb -p local/switch"
+
+volumes:
+  cartucho-data:
+  minio-data:
