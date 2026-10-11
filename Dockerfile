@@ -1,23 +1,56 @@
-FROM node:22-bookworm-slim AS build
+# Node is the runtime (better-sqlite3 and sharp are native modules built for its ABI);
+# bun is only the package manager.
+ARG NODE_IMAGE=node:22-alpine
+ARG BUN_IMAGE=oven/bun:1-alpine
+
+FROM ${BUN_IMAGE} AS bun
+
+# ---- Build: install workspaces, bundle the server, build the panel ----
+FROM ${NODE_IMAGE} AS build
+RUN apk add --no-cache python3 make g++
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/* && corepack enable
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json bun.lock ./
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
-RUN pnpm install --frozen-lockfile
+RUN bun install --frozen-lockfile
 COPY apps ./apps
-RUN pnpm -r build \
- && pnpm --filter @cartucho/server deploy --prod --legacy /out \
- && cp -r apps/server/dist /out/dist
+RUN bun run build \
+  && cd apps/server \
+  && node -e ' \
+    const pick = ["better-sqlite3", "sharp"]; \
+    const read = (n) => JSON.parse(require("fs").readFileSync(`node_modules/${n}/package.json`, "utf8")); \
+    const deps = Object.fromEntries(pick.map((n) => [n, read(n).version])); \
+    require("fs").writeFileSync("/app/runtime-deps.json", JSON.stringify(deps)); \
+    '
 
-FROM node:22-bookworm-slim
+# ---- Runtime deps: only the native modules the server bundle leaves external ----
+FROM ${NODE_IMAGE} AS runtime-deps
+RUN apk add --no-cache python3 make g++
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
+WORKDIR /deps
+# Exact versions resolved by the lockfile in the build stage.
+COPY --from=build /app/runtime-deps.json /tmp/runtime-deps.json
+RUN node -e ' \
+  const dependencies = require("/tmp/runtime-deps.json"); \
+  require("fs").writeFileSync("package.json", JSON.stringify({ \
+    name: "cartucho-runtime", private: true, dependencies, trustedDependencies: Object.keys(dependencies) })); \
+  ' \
+  && bun install --production \
+  # bun installs sharp's glibc and musl binaries; Alpine only loads the musl ones.
+  && rm -rf node_modules/@img/sharp-linux-* node_modules/@img/sharp-libvips-linux-* \
+  && rm -rf /root/.bun
+
+# ---- Final image ----
+FROM ${NODE_IMAGE}
 WORKDIR /app
 ENV NODE_ENV=production \
     DATA_DIR=/data \
     PORT=3000 \
     WEB_DIST=/app/web
-COPY --from=build /out /app
-COPY --from=build /app/apps/web/dist /app/web
+COPY --from=runtime-deps /deps/node_modules ./node_modules
+COPY --from=build /app/apps/server/dist ./dist
+COPY --from=build /app/apps/web/dist ./web
 RUN mkdir -p /data/games && chown -R node:node /data
 USER node
 VOLUME /data
