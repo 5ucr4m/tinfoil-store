@@ -4,6 +4,7 @@ export default {
     close: "Close",
     copy: "Copy {label}",
     copyValue: "Copy value",
+    copyFailed: "Couldn't copy. Select the text and copy it manually.",
     show: "Show",
     download: "Download",
     clear: "Clear",

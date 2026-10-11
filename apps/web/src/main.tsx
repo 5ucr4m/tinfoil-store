@@ -57,7 +57,9 @@ function App() {
       <AuthPage
         setup={auth.data.needsSetup}
         onDone={() => {
-          qc.clear();
+          // Drop data cached for the signed-out state, but keep the auth query: clearing it
+          // would detach this component from the cache and leave the sign-in screen up.
+          qc.removeQueries({ predicate: (q) => q.queryKey[0] !== "auth" });
           qc.setQueryData(["auth"], { needsSetup: false, authenticated: true });
         }}
       />

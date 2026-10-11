@@ -182,6 +182,32 @@ export function Badge({ children, tone = "neutral" }: { children: ReactNode; ton
   );
 }
 
+/**
+ * Copies text. The Clipboard API only exists on secure pages (https or localhost), and the
+ * panel is often opened by LAN IP over plain http, so fall back to a hidden textarea.
+ */
+export async function copyText(text: string) {
+  try {
+    if (window.isSecureContext && navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {}
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.style.position = "fixed";
+  area.style.opacity = "0";
+  document.body.appendChild(area);
+  area.select();
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch {}
+  area.remove();
+  return ok;
+}
+
 export function CopyField({
   value,
   label,
@@ -197,8 +223,13 @@ export function CopyField({
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const [shown, setShown] = useState(!secret);
+  const toast = useToast();
   const copy = async () => {
-    await navigator.clipboard.writeText(value);
+    if (!(await copyText(value))) {
+      setShown(true);
+      toast(t("common.actions.copyFailed"), "error");
+      return;
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 1400);
   };

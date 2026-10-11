@@ -42,7 +42,7 @@ export default {
     folderHint: "Created at the root of your Drive if it doesn't exist. Subfolders are included in the library too.",
     steps: {
       step1: "In the <link>Google Cloud Console</link>, create a project and enable the <b>Google Drive API</b>.",
-      step2: "In <b>OAuth consent screen</b>, choose <i>External</i> and click <b>Publish app</b>. In testing mode, Google disconnects the account every 7 days.",
+      step2: "In <b>Google Auth Platform → Audience</b> (formerly OAuth consent screen), choose <i>External</i> and click <b>Publish app</b>. While the app is in testing, only listed test users can sign in and Google disconnects the account every 7 days.",
       step3: "In <b>Credentials → Create OAuth client ID</b>, choose <i>Web application</i> and paste this redirect URI:",
       step4: "Paste the client ID and client secret below. On Google's screen, accept the unverified app warning (the app is yours).",
     },

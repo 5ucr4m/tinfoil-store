@@ -7,6 +7,7 @@ const common: Messages<typeof en> = {
     close: "Cerrar",
     copy: "Copiar {label}",
     copyValue: "Copiar valor",
+    copyFailed: "No se pudo copiar. Selecciona el texto y cópialo manualmente.",
     show: "Mostrar",
     download: "Descargar",
     clear: "Limpiar",

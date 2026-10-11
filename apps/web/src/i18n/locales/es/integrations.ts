@@ -45,7 +45,7 @@ const integrations: Messages<typeof en> = {
     folderHint: "Se crea en la raíz de Drive si aún no existe. Las subcarpetas también entran en la biblioteca.",
     steps: {
       step1: "En la <link>Google Cloud Console</link>, crea un proyecto y activa la <b>Google Drive API</b>.",
-      step2: "En <b>Pantalla de consentimiento de OAuth</b>, elige <i>Externo</i> y haz clic en <b>Publicar app</b>. En modo de prueba, Google desconecta la cuenta cada 7 días.",
+      step2: "En <b>Google Auth Platform → Público</b> (antes Pantalla de consentimiento de OAuth), elige <i>Externo</i> y haz clic en <b>Publicar app</b>. Mientras la app esté en prueba, solo entran los usuarios de prueba y Google desconecta la cuenta cada 7 días.",
       step3: "En <b>Credenciales → Crear ID de cliente de OAuth</b>, elige <i>Aplicación web</i> y pega este URI de redirección:",
       step4: "Pega el ID de cliente y el secreto del cliente abajo. En la pantalla de Google, acepta el aviso de app no verificada (la app es tuya).",
     },
