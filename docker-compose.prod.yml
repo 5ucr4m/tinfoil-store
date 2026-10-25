@@ -3,6 +3,8 @@
 services:
   app:
     image: ghcr.io/5ucr4m/tinfoil-store:${CARTUCHO_TAG:-latest}
+    # Dokploy only runs "up -d": without this, a redeploy keeps the old "latest" image.
+    pull_policy: always
     restart: unless-stopped
     expose:
       - "3000"
