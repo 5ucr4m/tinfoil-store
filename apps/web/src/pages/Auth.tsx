@@ -6,6 +6,7 @@ import { LanguageSwitch } from "../components/LanguageSwitch";
 import { Wordmark } from "../components/Shell";
 import { Button, Field, Input } from "../components/ui";
 import { useI18n } from "../i18n";
+import { LegalLinks } from "./Legal";
 import { api } from "../lib/api";
 
 export function AuthPage({ setup, onDone }: { setup: boolean; onDone: () => void }) {
@@ -102,6 +103,7 @@ export function AuthPage({ setup, onDone }: { setup: boolean; onDone: () => void
             ))}
           </div>
         </div>
+        <LegalLinks className="mt-5 flex justify-center gap-2 text-[13px] text-mute" />
       </motion.div>
     </div>
   );

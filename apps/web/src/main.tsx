@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import { Shell } from "./components/Shell";
 import { ContextMenuProvider } from "./components/ContextMenu";
 import { Spinner, ToastProvider } from "./components/ui";
@@ -13,6 +13,7 @@ import { AccessPage } from "./pages/Access";
 import { AuthPage } from "./pages/Auth";
 import { IdentifyPage } from "./pages/Identify";
 import { IntegrationsPage } from "./pages/Integrations";
+import { LegalPage } from "./pages/Legal";
 import { LibraryPage } from "./pages/Library";
 import { TinfoilPage } from "./pages/Tinfoil";
 import { UploadPage } from "./pages/Upload";
@@ -25,6 +26,7 @@ function App() {
   // Re-render the whole tree when the language changes (formatters read it directly).
   useI18n();
   const qc = useQueryClient();
+  const { pathname } = useLocation();
   const auth = useQuery({
     queryKey: ["auth"],
     queryFn: () => api<{ needsSetup: boolean; authenticated: boolean }>("/auth/state"),
@@ -43,6 +45,9 @@ function App() {
       off();
     };
   }, [qc]);
+
+  // Public pages: Google's OAuth consent screen links to them, signed in or not.
+  if (pathname === "/privacy" || pathname === "/terms") return <LegalPage doc={pathname === "/privacy" ? "privacy" : "terms"} />;
 
   if (!auth.data) {
     return (
