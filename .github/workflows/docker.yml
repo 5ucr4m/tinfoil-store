@@ -1,4 +1,4 @@
-name: Imagem Docker
+name: Docker image
 
 # Builds the image and publishes it to GitHub Container Registry:
 #   ghcr.io/<owner>/<repo>:latest     every push to main
