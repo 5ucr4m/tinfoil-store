@@ -15,10 +15,10 @@ services:
       PUBLIC_URL: ${PUBLIC_URL:-}
       # Encrypts integration tokens and signs sessions/download links. Keep it stable:
       # changing it means reconnecting integrations. Generate with: openssl rand -hex 32
-      APP_SECRET: ${APP_SECRET:?Defina APP_SECRET}
+      APP_SECRET: ${APP_SECRET:?Set APP_SECRET}
     volumes:
       - cartucho-data:/data
-      # Game files for the "Pasta no servidor" destination. A host path
+      # Game files for the "Server folder" destination. A host path
       # (e.g. /mnt/hd/switch) or the named volume below.
       - ${GAMES_PATH:-cartucho-games}:/data/games
 

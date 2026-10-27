@@ -266,7 +266,7 @@ export function buildFileName(titleId: string, version: number | null, ext: stri
   const meta = parseFileName(`[${titleId}]`);
   const own = titleRow(titleId);
   const base = meta.baseId ? titleRow(meta.baseId) : undefined;
-  let name = pretty(base?.name ?? own?.name ?? fallbackName ?? "Jogo");
+  let name = pretty(base?.name ?? own?.name ?? fallbackName ?? "Game");
   if (meta.kind === "dlc" && own?.name) name = pretty(own.name);
   const v = version ?? (meta.kind === "update" ? null : 0);
   return `${name} [${titleId}]${v !== null ? `[v${v}]` : ""}${ext.toLowerCase()}`;
