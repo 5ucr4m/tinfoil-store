@@ -1,19 +1,21 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { env } from "./env";
 import { fail, failWith } from "./http";
 import { syncAll } from "./library";
 import { accessRoutes } from "./routes/access";
-import { authRoutes, requireAdmin } from "./routes/auth";
+import { accountRoutes } from "./routes/account";
+import { authRoutes } from "./routes/auth";
 import { fileRoutes, titleRoutes } from "./routes/files";
 import { identifyRoutes } from "./routes/identify";
 import { gdriveCallback, integrationRoutes } from "./routes/integrations";
 import { storeRoutes } from "./routes/store";
 import { seedTags, tagRoutes } from "./routes/tags";
 import { uploadRoutes } from "./routes/uploads";
+import { requireAdmin, requireSession } from "./session";
 import { refreshTitleDb, titleDbStatus } from "./titles";
 
 seedTags();
@@ -35,8 +37,31 @@ app.get("/healthz", (c) => c.json({ ok: true }));
 app.route("/tinfoil", storeRoutes);
 app.route("/api/auth", authRoutes);
 
+/*
+ * Who may call what. Everything under /api needs a session; these pairs are also open to
+ * read-only accounts. A new endpoint is admin-only until it is listed here, so forgetting
+ * one closes it rather than opening it.
+ */
+const READ_ONLY: { methods: string[]; path: RegExp }[] = [
+  { methods: ["GET", "POST", "PUT"], path: /^\/api\/account(\/[a-z]+)?$/ },
+  { methods: ["GET"], path: /^\/api\/files$/ },
+  { methods: ["GET"], path: /^\/api\/files\/stats$/ },
+  { methods: ["GET", "HEAD"], path: /^\/api\/files\/[^/]+\/download$/ },
+  // GET only: the titledb refresh is a POST and stays with admins.
+  { methods: ["GET"], path: /^\/api\/titles(\/.*)?$/ },
+  { methods: ["GET"], path: /^\/api\/tags$/ },
+];
+
+const requireAdminUnlessReadOnly: MiddlewareHandler = async (c, next) => {
+  const path = new URL(c.req.url).pathname.replace(/(.)\/+$/, "$1");
+  const open = READ_ONLY.some((rule) => rule.methods.includes(c.req.method) && rule.path.test(path));
+  return open ? next() : requireAdmin(c, next);
+};
+
 const api = new Hono();
-api.use("*", requireAdmin);
+api.use("*", requireSession);
+api.use("*", requireAdminUnlessReadOnly);
+api.route("/account", accountRoutes);
 api.route("/integrations/gdrive/callback", gdriveCallback);
 api.route("/integrations", integrationRoutes);
 api.route("/files", fileRoutes);
@@ -58,7 +83,7 @@ if (existsSync(env.webDist)) {
 }
 
 serve({ fetch: app.fetch, port: env.port }, (info) => {
-  console.log(`Cartucho ouvindo em http://localhost:${info.port}`);
+  console.log(`Cartucho listening on http://localhost:${info.port}`);
 });
 
 // Keep the library in step with files added outside the panel.

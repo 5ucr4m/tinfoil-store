@@ -4,19 +4,29 @@ import type en from "../en/tinfoil";
 const tinfoil: Messages<typeof en> = {
   title: "Conectar Tinfoil",
   meta: "Cadastre a store uma vez no console. Depois disso, tudo o que entrar na biblioteca aparece no Tinfoil.",
+  access: {
+    title: "Seu acesso ao Tinfoil",
+    description:
+      "Ligue para abrir esta store em um Switch. No console você entra com o mesmo usuário e senha que usa aqui.",
+    toggle: "Acesso ao Tinfoil",
+    off: "Os valores do seu console aparecem aqui quando o acesso ao Tinfoil estiver ligado.",
+    turnedOn: "Acesso ao Tinfoil ligado. Cadastre a store no console com os valores do cartão.",
+    turnedOff: "Acesso ao Tinfoil desligado. Os consoles que entravam com a sua conta perdem a store.",
+    lastUsed: "Um console abriu a store {when}.",
+    never: "Nenhum console abriu a store com a sua conta ainda.",
+  },
   console: {
     title: "No console",
     step1: "Abra o Tinfoil e vá em <b>File Browser</b>.",
     step2: "Aperte <b>−</b> (menos) para adicionar um novo local.",
-    step3: "Preencha os campos como no cartão ao lado. Para a senha, use a do usuário da store.",
+    step3: "Preencha os campos como no cartão ao lado. Para a senha, use a mesma com que você entra no painel.",
     step4: "Aperte <b>X</b> para salvar e volte. Os jogos aparecem em <b>New Games</b> e na própria store.",
-    noUser: "Você ainda não tem usuário da store. <link>Crie um em Acesso</link> antes de conectar.",
     httpNote:
       "A store está respondendo em <b>http</b>. Fora de casa, publique atrás de HTTPS (o Traefik do Dokploy faz isso) e ajuste o endereço público abaixo.",
   },
   card: {
     title: "Valores para o Tinfoil",
-    createInAccess: "crie em Acesso",
+    passwordHint: "a mesma senha com que você entra",
     loopback:
       "O Switch não alcança \"{host}\": esse endereço aponta para o próprio console. Use o IP deste computador na rede (ex.: 192.168.x.x). Abra o painel por esse IP ou preencha o endereço público abaixo.",
   },
@@ -55,7 +65,7 @@ const tinfoil: Messages<typeof en> = {
     failed: "Falhou: {error}",
     idle: "Ainda não baixado.",
   },
-  fields: { protocol: "Protocol", host: "Host", port: "Port", path: "Path", username: "Username", title: "Title", url: "URL" },
+  fields: { protocol: "Protocol", host: "Host", port: "Port", path: "Path", username: "Username", password: "Password", title: "Title", url: "URL" },
 };
 
 export default tinfoil;

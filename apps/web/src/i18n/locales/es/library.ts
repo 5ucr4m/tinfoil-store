@@ -26,6 +26,7 @@ const library: Messages<typeof en> = {
     title: "No hay juegos en el estante",
     withProviders: "Sube tus archivos .nsp, .nsz o .xci. Si ya están en Drive o en el bucket, sincroniza la integración.",
     noProviders: "Conecta un destino (Google Drive, un bucket S3 o una carpeta del servidor) y sube tus archivos.",
+    readOnly: "Todavía no se agregó nada. Los juegos aparecen aquí en cuanto un administrador los suba.",
     connect: "Conectar un destino",
   },
   sections: { base: "Juego base", update: "Actualizaciones", dlc: "DLC", unknown: "Archivos" },

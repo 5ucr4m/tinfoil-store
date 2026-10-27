@@ -35,6 +35,12 @@ covers and metadata, and serves it to Tinfoil as a single store.
   credentials for those), byte ranges for resumable installs.
 - Console approval by Tinfoil UID, and per-IP throttling of wrong passwords.
 
+**Accounts**
+- Two roles. **Admin** uploads files, connects destinations, removes games and manages the other accounts.
+  **Read-only** browses the library and downloads, and changes nothing.
+- One credential per person: the same username and password sign in to the panel and, when that person turns
+  **Tinfoil access** on for their own account, to the store from the console.
+
 **Panel**
 - English, Portuguese (Brazil) and Spanish; light and dark themes; works on phones.
 
@@ -54,11 +60,13 @@ docker compose up -d --build              # panel on http://localhost:3080
 docker compose --profile s3 up -d --build # same, plus a MinIO bucket to try the S3 destination
 ```
 
-1. Open the panel and create the panel password.
+1. Open the panel and create the admin account (username and password).
 2. **Integrations** → add a destination. `./games` is mounted at `/data/games`, ready for "Server folder".
-3. **Access** → create a store user and note its password.
-4. **Connect Tinfoil** → copy the values into Tinfoil (File Browser → press `−` → new location).
+3. **Connect Tinfoil** → turn **Tinfoil access** on for your account, then copy the values into Tinfoil
+   (File Browser → press `−` → new location). The password is the one you sign in with.
    The console needs your computer's network address (e.g. `192.168.1.20`), not `localhost`.
+4. For other people: **Access** → create an account, pick **Read-only** or **Admin**, and hand over the
+   generated password. Each person turns their own Tinfoil access on.
 
 Local MinIO for testing: endpoint `http://minio:9000`, public endpoint `http://localhost:9000`, bucket
 `switch`, user `cartucho`, password `cartucho-secret`, path-style on.

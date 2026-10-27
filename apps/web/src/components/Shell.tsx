@@ -1,24 +1,35 @@
 import { AnimatePresence, motion } from "motion/react";
-import { Gamepad2, Library, LogOut, Monitor, Moon, Plug, ShieldCheck, Sun, Upload } from "lucide-react";
+import { Gamepad2, Library, LogOut, Monitor, Moon, Plug, ShieldCheck, Sun, Upload, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { NavLink, useLocation } from "react-router";
 import { useI18n, type MessageKey } from "../i18n";
 import { api } from "../lib/api";
 import { bytes } from "../lib/format";
+import { useSession } from "../lib/session";
 import { useTheme, type ThemePref } from "../lib/theme";
 import { isActive, useUploads } from "../lib/uploads";
 import type { Transfer } from "../lib/api";
 import { Pins } from "./Cartridge";
+import { RoleMark, roleLabel } from "./RoleMark";
 import { isRunning as isTransferRunning, transferSpeed, useTransfers } from "./Transfers";
 import { LanguageSwitch } from "./LanguageSwitch";
 import { cx } from "./ui";
 
-const NAV: { to: string; label: MessageKey; short?: MessageKey; icon: typeof Library }[] = [
+const NAV: {
+  to: string;
+  label: MessageKey;
+  short?: MessageKey;
+  icon: typeof Library;
+  admin?: true;
+  /** The sidebar shows the account as a chip instead; the phone has no room for one. */
+  phoneOnly?: true;
+}[] = [
   { to: "/", label: "shell.nav.library", icon: Library },
-  { to: "/upload", label: "shell.nav.upload", icon: Upload },
-  { to: "/integrations", label: "shell.nav.integrations", icon: Plug },
-  { to: "/access", label: "shell.nav.access", icon: ShieldCheck },
+  { to: "/upload", label: "shell.nav.upload", icon: Upload, admin: true },
+  { to: "/integrations", label: "shell.nav.integrations", icon: Plug, admin: true },
+  { to: "/access", label: "shell.nav.access", icon: ShieldCheck, admin: true },
   { to: "/connect", label: "shell.nav.tinfoil", short: "shell.nav.tinfoilShort", icon: Gamepad2 },
+  { to: "/account", label: "shell.nav.account", icon: UserRound, phoneOnly: true },
 ];
 
 export function Wordmark({ className }: { className?: string }) {
@@ -111,9 +122,40 @@ function TransferDock({ transfers }: { transfers: Transfer[] }) {
   );
 }
 
+/**
+ * Who you are and what that allows, said once in the chrome. The write-protect mark
+ * carries the role, so no button has to explain itself.
+ */
+function AccountChip() {
+  const { t } = useI18n();
+  const { user } = useSession();
+  const tone = user.role === "admin" ? "text-signal" : "text-mute";
+  return (
+    <NavLink
+      to="/account"
+      title={t("shell.account")}
+      className={({ isActive }) =>
+        cx(
+          "flex items-center gap-2.5 rounded-2xl border bg-raised px-3 py-2.5 shadow-card transition-transform hover:-translate-y-0.5",
+          isActive ? "border-signal/60" : "border-line",
+        )
+      }
+    >
+      <RoleMark role={user.role} className={cx("size-4", tone)} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13px] font-medium">{user.username}</span>
+        <span className="eyebrow block text-[9px]">{t(roleLabel(user.role))}</span>
+      </span>
+    </NavLink>
+  );
+}
+
 export function Shell({ children, onLogout }: { children: ReactNode; onLogout: () => void }) {
   const { t } = useI18n();
+  const { isAdmin } = useSession();
   const location = useLocation();
+  const nav = NAV.filter((item) => !item.admin || isAdmin);
+  const sidebarNav = nav.filter((item) => !item.phoneOnly);
   const uploads = useUploads();
   // Polls server transfers while any runs and raises done/failed toasts on every page.
   const transfers = useTransfers({ notify: true });
@@ -132,7 +174,7 @@ export function Shell({ children, onLogout }: { children: ReactNode; onLogout: (
           <Wordmark />
         </div>
         <nav className="mt-10 flex flex-col gap-1" aria-label={t("shell.nav.label")}>
-          {NAV.map(({ to, label, icon: Icon }) => (
+          {sidebarNav.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -168,6 +210,7 @@ export function Shell({ children, onLogout }: { children: ReactNode; onLogout: (
         <div className="mt-auto flex flex-col gap-4">
           <TransferDock transfers={transfers} />
           <div className="flex flex-col gap-2 px-1">
+            <AccountChip />
             <LanguageSwitch />
             <div className="flex items-center justify-between">
               <ThemeSwitch />
@@ -212,19 +255,24 @@ export function Shell({ children, onLogout }: { children: ReactNode; onLogout: (
       {/* Mobile bottom nav */}
       <nav
         aria-label={t("shell.nav.label")}
-        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 grid border-t border-line bg-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+        style={{ gridTemplateColumns: `repeat(${nav.length}, minmax(0, 1fr))` }}
       >
-        {NAV.map(({ to, label, short, icon: Icon }) => (
+        {nav.map(({ to, label, short, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
             end={to === "/"}
             className={({ isActive }) =>
-              cx("relative flex flex-col items-center gap-1 py-2.5 text-[10px]", isActive ? "text-signal" : "text-mute")
+              cx(
+                "relative flex min-w-0 flex-col items-center gap-1 px-0.5 py-2.5 text-[10px]",
+                isActive ? "text-signal" : "text-mute",
+              )
             }
           >
             <Icon className="size-5" strokeWidth={1.9} />
-            {t(short ?? label)}
+            {/* Six destinations fit on a phone only if the longest label can clip instead of collide. */}
+            <span className="max-w-full truncate">{t(short ?? label)}</span>
             {to === "/upload" && activeCount > 0 && (
               <span className="absolute top-1.5 right-[calc(50%-18px)] size-2 rounded-full bg-pin" />
             )}

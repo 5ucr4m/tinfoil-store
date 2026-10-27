@@ -23,6 +23,7 @@ export default {
     title: "No games on the shelf",
     withProviders: "Upload your .nsp, .nsz or .xci files. If they're already in Drive or in the bucket, sync the integration.",
     noProviders: "Connect a destination (Google Drive, an S3 bucket or a server folder) and upload your files.",
+    readOnly: "Nothing has been added yet. Games show up here as soon as an admin uploads them.",
     connect: "Connect a destination",
   },
   sections: { base: "Base game", update: "Updates", dlc: "DLCs", unknown: "Files" },

@@ -1,52 +1,47 @@
-import type { Messages } from "../..";
-import type en from "../en/access";
-
-const access: Messages<typeof en> = {
+export default {
   title: "Acceso",
-  meta: "Quién puede abrir la tienda en Tinfoil y qué consolas ya se conectaron.",
-  users: {
-    title: "Usuarios de la tienda",
-    description: "El login que escribes en Tinfoil. Crea uno para ti y otros para quien quieras dar acceso.",
-    removed: "Usuario eliminado. Las consolas que usaban ese login pierden el acceso.",
+  meta: "Quién puede entrar, qué puede cambiar cada uno y qué consolas se han conectado.",
+  people: {
+    title: "Personas",
+    description:
+      "Todos los que tienen cuenta. Los administradores cambian la biblioteca; las cuentas de solo lectura navegan y descargan. El acceso a Tinfoil lo activa cada persona.",
+    removed: "Cuenta eliminada. Las consolas que entraban con ella pierden la tienda.",
     revealTitle: "Contraseña de {username}",
-    revealNote: "Anótala ahora. No se vuelve a mostrar, pero puedes generar otra.",
+    revealNote: "Apúntala ahora. No se mostrará de nuevo, pero puedes generar otra.",
     readabilityNote:
-      "Los espacios solo están para facilitar la lectura y no forman parte de la contraseña. En la Switch, escríbela toda junta; el botón de copiar ya la copia sin espacios.",
-    done: "Ya la anoté",
+      "Los espacios están solo para que se lea mejor y no forman parte de la contraseña. En la Switch escríbela toda junta; el botón de copiar ya la copia sin espacios.",
+    done: "Ya la apunté",
     username: "Usuario",
     password: "Contraseña",
-    lastUsed: "último acceso {when}",
+    you: "tú",
+    roleLabel: "Rol de {username}",
+    lastLogin: "entró {when}",
+    neverSignedIn: "nunca entró",
+    tinfoilLabel: "Acceso a Tinfoil de {username}",
+    tinfoilOn: "Tinfoil activado",
+    tinfoilOff: "Tinfoil desactivado",
+    tinfoilSince: "Tinfoil activado · consola {when}",
     newPassword: "Nueva contraseña",
     removeLabel: "Eliminar {username}",
-    empty: "Sin usuarios, la tienda rechaza cualquier acceso. Crea el primero abajo.",
-    placeholder: "nombre de usuario, ej.: switch-sala",
-    newUserLabel: "Nombre del nuevo usuario",
-    create: "Crear usuario",
+    placeholder: "usuario, p. ej. marcus",
+    newUserLabel: "Nombre de la cuenta nueva",
+    newRoleLabel: "Rol de la cuenta nueva",
+    create: "Crear cuenta",
   },
   consoles: {
     title: "Consolas",
     description:
-      "Tinfoil envía un identificador de la consola (UID) en cada acceso. Aprueba solo las tuyas para bloquear logins filtrados.",
+      "Tinfoil envía un identificador de consola (UID) en cada solicitud. Aprueba solo las tuyas para bloquear accesos filtrados.",
     approvedOnly: "Solo consolas aprobadas",
     toastApprovedOnly: "Ahora solo las consolas aprobadas abren la tienda.",
-    toastAnyone: "Cualquier consola con login abre la tienda.",
-    empty: "Ninguna consola se ha conectado todavía. Aparece aquí después de su primer acceso desde Tinfoil.",
-    namePlaceholder: "Ponle un nombre (ej.: Switch de la sala)",
+    toastAnyone: "Cualquier consola con un acceso abre la tienda.",
+    empty: "Todavía no se conectó ninguna consola. Aparece aquí tras su primera solicitud desde Tinfoil.",
+    namePlaceholder: "Ponle un nombre (p. ej. Switch del salón)",
     nameLabel: "Nombre de la consola",
     approved: "Aprobada",
     notApproved: "No aprobada",
     seen: "vista {when}",
-    hits: { one: "{count} acceso", other: "{count} accesos" },
+    hits: { one: "{count} solicitud", other: "{count} solicitudes" },
     forget: "Olvidar consola",
   },
-  panelPassword: {
-    title: "Contraseña del panel",
-    description: "Cambiar la contraseña cierra la sesión en todos los navegadores, excepto este.",
-    changed: "Contraseña del panel cambiada. Las demás sesiones se cerraron.",
-    current: "Contraseña actual",
-    next: "Nueva contraseña",
-    submit: "Cambiar contraseña",
-  },
 };
-
-export default access;

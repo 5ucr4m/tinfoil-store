@@ -12,6 +12,7 @@ const common: Messages<typeof en> = {
     download: "Baixar",
     clear: "Limpar",
   },
+  roles: { admin: "Administrador", user: "Somente leitura" },
   kind: { base: "Jogo", update: "Atualização", dlc: "DLC", unknown: "Sem ID" },
   provider: { gdrive: "Google Drive", s3: "S3 compatível", local: "Pasta no servidor" },
   version: { patch: "v{version} · atualização {number}" },

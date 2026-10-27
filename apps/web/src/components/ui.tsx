@@ -266,6 +266,19 @@ export function CopyField({
   );
 }
 
+/**
+ * CopyField's shape for a value there is nothing to copy — the panel never holds a
+ * password in the clear. The dashed border says "this is a pointer, not a value".
+ */
+export function StaticField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex min-h-10 min-w-0 items-center gap-1 rounded-xl border border-line border-dashed bg-panel px-3">
+      <span className="eyebrow mr-2 shrink-0">{label}</span>
+      <span className="min-w-0 flex-1 truncate text-[12px] text-mute">{value}</span>
+    </div>
+  );
+}
+
 export function Modal({
   open,
   onClose,

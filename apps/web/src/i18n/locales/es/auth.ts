@@ -1,18 +1,16 @@
-import type { Messages } from "../..";
-import type en from "../en/auth";
-
-const auth: Messages<typeof en> = {
-  setupTitle: "Crea la contraseña del panel",
-  loginTitle: "Inicia sesión en el panel",
-  setupBody: "Esta contraseña protege tu biblioteca y tus integraciones. Tinfoil usa otros usuarios, que creas después.",
-  loginBody: "Usa la contraseña que definiste la primera vez.",
+export default {
+  setupTitle: "Crea la cuenta de administrador",
+  loginTitle: "Entra al panel",
+  setupBody: "Esta cuenta sube juegos, conecta destinos y decide quién más entra. A las demás personas las agregas en Acceso.",
+  loginBody: "Usa la cuenta que te dio un administrador.",
+  user: "Usuario",
+  userHint: "Letras, números, punto, guion o guion bajo.",
+  userPlaceholder: "p. ej. marcus",
   password: "Contraseña",
   repeat: "Repite la contraseña",
   repeatHint: "Al menos 8 caracteres.",
   mismatch: "Las contraseñas no coinciden.",
-  failed: "No se pudo iniciar sesión.",
-  submitSetup: "Crear contraseña y entrar",
-  submitLogin: "Iniciar sesión",
+  failed: "No se pudo entrar.",
+  submitSetup: "Crear cuenta y entrar",
+  submitLogin: "Entrar",
 };
-
-export default auth;

@@ -4,6 +4,7 @@ import { ArrowRight, Check, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useI18n } from "../i18n";
 import { api, type Integration, type Transfer } from "../lib/api";
+import { useSession } from "../lib/session";
 import { bytes, duration } from "../lib/format";
 import { Pins } from "./Cartridge";
 import { ProviderIcon } from "./ProviderIcon";
@@ -20,10 +21,13 @@ export function useTransfers({ notify = false } = {}) {
   const qc = useQueryClient();
   const toast = useToast();
   const { t: tr } = useI18n();
+  const { isAdmin } = useSession();
   const query = useQuery({
     queryKey: ["transfers"],
     queryFn: () => api<{ transfers: Transfer[] }>("/files/transfers"),
     refetchInterval: (q) => (q.state.data?.transfers.some(isRunning) ? 1000 : false),
+    // Only an admin can start one, so don't ask on every page load for everyone else.
+    enabled: isAdmin,
   });
   const seen = useRef(new Map<string, Transfer["state"]>());
   useEffect(() => {
@@ -54,7 +58,13 @@ export function useMove() {
 }
 
 export function useDestinations() {
-  return useQuery({ queryKey: ["integrations"], queryFn: () => api<{ integrations: Integration[] }>("/integrations") });
+  // Destinations are the admin's business; read-only accounts never move or upload files.
+  const { isAdmin } = useSession();
+  return useQuery({
+    queryKey: ["integrations"],
+    queryFn: () => api<{ integrations: Integration[] }>("/integrations"),
+    enabled: isAdmin,
+  });
 }
 
 /** Destination list for "Move to" / "Copy to". */

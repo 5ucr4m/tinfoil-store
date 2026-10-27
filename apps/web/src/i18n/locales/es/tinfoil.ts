@@ -4,19 +4,29 @@ import type en from "../en/tinfoil";
 const tinfoil: Messages<typeof en> = {
   title: "Conectar Tinfoil",
   meta: "Agrega la tienda una sola vez en la consola. Después, todo lo que entre en la biblioteca aparece en Tinfoil.",
+  access: {
+    title: "Tu acceso a Tinfoil",
+    description:
+      "Actívalo para abrir esta tienda en una Switch. En la consola entras con el mismo usuario y contraseña que usas aquí.",
+    toggle: "Acceso a Tinfoil",
+    off: "Los valores de tu consola aparecen aquí cuando el acceso a Tinfoil esté activado.",
+    turnedOn: "Acceso a Tinfoil activado. Agrega la tienda en la consola con los valores de la tarjeta.",
+    turnedOff: "Acceso a Tinfoil desactivado. Las consolas que entraban con tu cuenta pierden la tienda.",
+    lastUsed: "Una consola abrió la tienda {when}.",
+    never: "Ninguna consola abrió la tienda con tu cuenta todavía.",
+  },
   console: {
     title: "En la consola",
     step1: "Abre Tinfoil y ve a <b>File Browser</b>.",
     step2: "Pulsa <b>−</b> (menos) para agregar una nueva ubicación.",
-    step3: "Completa los campos como en la tarjeta. Para la contraseña, usa la del usuario de la tienda.",
+    step3: "Completa los campos como en la tarjeta. Para la contraseña, usa la misma con la que entras al panel.",
     step4: "Pulsa <b>X</b> para guardar y vuelve. Los juegos aparecen en <b>New Games</b> y en la propia tienda.",
-    noUser: "Todavía no tienes un usuario de la tienda. <link>Crea uno en Acceso</link> antes de conectar.",
     httpNote:
       "La tienda está respondiendo por <b>http</b>. Fuera de casa, publícala detrás de HTTPS (el Traefik de Dokploy lo hace) y ajusta la dirección pública abajo.",
   },
   card: {
     title: "Valores para Tinfoil",
-    createInAccess: "crea uno en Acceso",
+    passwordHint: "la misma contraseña con la que entras",
     loopback:
       "La Switch no llega a \"{host}\": esa dirección apunta a la propia consola. Usa la IP de esta computadora en la red (ej.: 192.168.x.x). Abre el panel por esa IP o completa la dirección pública abajo.",
   },
@@ -55,7 +65,7 @@ const tinfoil: Messages<typeof en> = {
     failed: "Falló: {error}",
     idle: "Todavía no descargado.",
   },
-  fields: { protocol: "Protocol", host: "Host", port: "Port", path: "Path", username: "Username", title: "Title", url: "URL" },
+  fields: { protocol: "Protocol", host: "Host", port: "Port", path: "Path", username: "Username", password: "Password", title: "Title", url: "URL" },
 };
 
 export default tinfoil;

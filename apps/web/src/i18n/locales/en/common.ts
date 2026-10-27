@@ -9,6 +9,7 @@ export default {
     download: "Download",
     clear: "Clear",
   },
+  roles: { admin: "Admin", user: "Read-only" },
   kind: { base: "Game", update: "Update", dlc: "DLC", unknown: "No ID" },
   provider: { gdrive: "Google Drive", s3: "S3-compatible", local: "Server folder" },
   version: { patch: "v{version} · update {number}" },

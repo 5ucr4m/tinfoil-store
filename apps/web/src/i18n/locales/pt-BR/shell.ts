@@ -10,7 +10,9 @@ const shell: Messages<typeof en> = {
     access: "Acesso",
     tinfoil: "Conectar Tinfoil",
     tinfoilShort: "Tinfoil",
+    account: "Conta",
   },
+  account: "Sua conta",
   signOut: "Sair",
   dock: { writing: "Gravando {count}" },
 };

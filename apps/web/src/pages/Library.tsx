@@ -14,6 +14,7 @@ import { ProviderIcon } from "../components/ProviderIcon";
 import { Badge, Button, copyText, cx, Input, Modal, PageHeader, Select, Sheet, useToast } from "../components/ui";
 import { Trans, useI18n } from "../i18n";
 import { api, type Integration, type Kind, type LibraryFile, type PendingFile, type TagsResponse } from "../lib/api";
+import { useSession } from "../lib/session";
 import { bytes, cleanName, genreLabel, kindLabel, prettyTitle, versionLabel } from "../lib/format";
 
 interface Group {
@@ -92,10 +93,12 @@ const FILTERS: ("all" | Kind)[] = ["all", "base", "update", "dlc", "unknown"];
 
 export function LibraryPage() {
   const { t, locale } = useI18n();
+  const { isAdmin } = useSession();
   const files = useQuery({ queryKey: ["files"], queryFn: () => api<{ files: LibraryFile[] }>("/files") });
   const integrations = useQuery({
     queryKey: ["integrations"],
     queryFn: () => api<{ integrations: Integration[] }>("/integrations"),
+    enabled: isAdmin,
   });
   const titledb = useQuery({
     queryKey: ["titledb"],
@@ -108,7 +111,11 @@ export function LibraryPage() {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"recent" | "name" | "size">("recent");
   const [openKey, setOpenKey] = useState<string | null>(null);
-  const pending = useQuery({ queryKey: ["identify-pending"], queryFn: () => api<{ files: PendingFile[] }>("/identify/pending") });
+  const pending = useQuery({
+    queryKey: ["identify-pending"],
+    queryFn: () => api<{ files: PendingFile[] }>("/identify/pending"),
+    enabled: isAdmin,
+  });
   const unidentified = pending.data?.files.length ?? 0;
   const [types, setTypes] = useState<Set<TypeKey>>(new Set());
   const [managing, setManaging] = useState(false);
@@ -172,7 +179,8 @@ export function LibraryPage() {
           ) : null
         }
         actions={
-          !isEmpty && (
+          !isEmpty &&
+          isAdmin && (
             <Link to="/upload">
               <Button variant="primary" icon={<Upload className="size-4" />}>
                 {t("library.uploadFiles")}
@@ -208,7 +216,7 @@ export function LibraryPage() {
       )}
 
       {isEmpty ? (
-        <EmptyLibrary hasProviders={providers.length > 0} />
+        <EmptyLibrary hasProviders={providers.length > 0} canUpload={isAdmin} />
       ) : (
         <>
           <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -267,6 +275,7 @@ export function LibraryPage() {
             onToggle={toggleType}
             onClear={() => setTypes(new Set())}
             onManage={() => setManaging(true)}
+            canManage={isAdmin}
           />
 
           {files.isLoading ? (
@@ -340,7 +349,7 @@ function Grid({ children }: { children: React.ReactNode }) {
   );
 }
 
-function EmptyLibrary({ hasProviders }: { hasProviders: boolean }) {
+function EmptyLibrary({ hasProviders, canUpload }: { hasProviders: boolean; canUpload: boolean }) {
   const { t } = useI18n();
   return (
     <div className="board relative overflow-hidden rounded-[28px] border border-line px-6 py-16 text-center sm:py-24">
@@ -356,22 +365,26 @@ function EmptyLibrary({ hasProviders }: { hasProviders: boolean }) {
           <div className="size-full rounded-md bg-panel" />
         </motion.div>
         <h2 className="display-narrow text-3xl">{t("library.empty.title")}</h2>
-        <p className="mt-3 text-mute">{hasProviders ? t("library.empty.withProviders") : t("library.empty.noProviders")}</p>
-        <div className="mt-8 flex flex-wrap justify-center gap-2">
-          {hasProviders ? (
-            <Link to="/upload">
-              <Button variant="primary" icon={<Upload className="size-4" />}>
-                {t("library.uploadFiles")}
-              </Button>
-            </Link>
-          ) : (
-            <Link to="/integrations">
-              <Button variant="primary" icon={<Plug className="size-4" />}>
-                {t("library.empty.connect")}
-              </Button>
-            </Link>
-          )}
-        </div>
+        <p className="mt-3 text-mute">
+          {!canUpload ? t("library.empty.readOnly") : hasProviders ? t("library.empty.withProviders") : t("library.empty.noProviders")}
+        </p>
+        {canUpload && (
+          <div className="mt-8 flex flex-wrap justify-center gap-2">
+            {hasProviders ? (
+              <Link to="/upload">
+                <Button variant="primary" icon={<Upload className="size-4" />}>
+                  {t("library.uploadFiles")}
+                </Button>
+              </Link>
+            ) : (
+              <Link to="/integrations">
+                <Button variant="primary" icon={<Plug className="size-4" />}>
+                  {t("library.empty.connect")}
+                </Button>
+              </Link>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -381,6 +394,7 @@ const ORDER: Kind[] = ["base", "update", "dlc", "unknown"];
 
 function TitleDetail({ group }: { group: Group }) {
   const { t } = useI18n();
+  const { isAdmin } = useSession();
   const banner = group.banner ?? group.art;
   return (
     <div>
@@ -412,8 +426,8 @@ function TitleDetail({ group }: { group: Group }) {
         <TitleInfoBlock group={group} />
 
         <div className="mt-8 flex flex-col gap-7">
-          <TitleCollections itemKey={group.key} />
-          <MoveAll group={group} />
+          {isAdmin && <TitleCollections itemKey={group.key} />}
+          {isAdmin && <MoveAll group={group} />}
           {ORDER.filter((k) => group.items.some((it) => it.kind === k)).map((kind) => (
             <div key={kind}>
               <h3 className="eyebrow mb-3">{t(`library.sections.${kind}`)}</h3>
@@ -501,6 +515,7 @@ function ModeSwitch({ mode, setMode }: { mode: "copy" | "move"; setMode: (m: "co
 
 function FileRow({ item }: { item: Item }) {
   const { t } = useI18n();
+  const { isAdmin } = useSession();
   const qc = useQueryClient();
   const toast = useToast();
   const transfers = useTransfers();
@@ -560,35 +575,46 @@ function FileRow({ item }: { item: Item }) {
             {item.kind === "unknown" && <Badge tone="pin">{kindLabel("unknown")}</Badge>}
           </div>
         </div>
-        <button
-          onClick={() => setPanel((p) => (p === "move" ? null : "move"))}
-          disabled={!!transfer}
-          className="grid size-8 shrink-0 place-items-center rounded-lg text-mute transition-colors hover:bg-signal-soft hover:text-signal disabled:opacity-40"
-          aria-label={t("library.row.copyOrMoveFile", { name: item.name })}
-          aria-expanded={panel === "move"}
-          title={t("library.row.copyOrMove")}
-        >
-          <ArrowRightLeft className="size-4" />
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setPanel((p) => (p === "move" ? null : "move"))}
+            disabled={!!transfer}
+            className="grid size-8 shrink-0 place-items-center rounded-lg text-mute transition-colors hover:bg-signal-soft hover:text-signal disabled:opacity-40"
+            aria-label={t("library.row.copyOrMoveFile", { name: item.name })}
+            aria-expanded={panel === "move"}
+            title={t("library.row.copyOrMove")}
+          >
+            <ArrowRightLeft className="size-4" />
+          </button>
+        )}
+        {/* The only action a read-only account has, so it gets its name rather than a bare icon. */}
         <a
           href={`/api/files/${primary.id}/download`}
           download={item.name}
           onClick={() => toast(t("library.row.downloading", { name: item.name }), "info")}
-          className="-ml-2 grid size-8 shrink-0 place-items-center rounded-lg text-mute transition-colors hover:bg-signal-soft hover:text-signal"
+          className={cx(
+            "shrink-0 rounded-lg text-mute transition-colors hover:bg-signal-soft hover:text-signal",
+            isAdmin
+              ? "-ml-2 grid size-8 place-items-center"
+              : "inline-flex h-8 items-center gap-1.5 border border-line px-2.5 text-[13px]",
+          )}
           aria-label={t("library.row.downloadFile", { name: item.name })}
           title={t("common.actions.download")}
         >
           <Download className="size-4" />
+          {!isAdmin && t("common.actions.download")}
         </a>
-        <button
-          onClick={() => setPanel((p) => (p === "delete" ? null : "delete"))}
-          disabled={!!transfer}
-          className="-ml-2 grid size-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-danger-soft hover:text-danger disabled:opacity-40"
-          aria-label={t("library.row.deleteFile", { name: item.name })}
-          aria-expanded={panel === "delete"}
-        >
-          <Trash2 className="size-4" />
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setPanel((p) => (p === "delete" ? null : "delete"))}
+            disabled={!!transfer}
+            className="-ml-2 grid size-8 shrink-0 place-items-center rounded-lg text-faint transition-colors hover:bg-danger-soft hover:text-danger disabled:opacity-40"
+            aria-label={t("library.row.deleteFile", { name: item.name })}
+            aria-expanded={panel === "delete"}
+          >
+            <Trash2 className="size-4" />
+          </button>
+        )}
       </div>
       {transfer && <TransferProgress transfer={transfer} className="mt-3 border-t border-line pt-3" />}
       <AnimatePresence initial={false}>
@@ -801,6 +827,7 @@ const youtubeUrl = (title: string) =>
 /** Right-click menus for cartridges and file rows. */
 function useLibraryMenus() {
   const { t } = useI18n();
+  const { isAdmin } = useSession();
   const qc = useQueryClient();
   const toast = useToast();
   const move = useMove();
@@ -850,26 +877,31 @@ function useLibraryMenus() {
             })),
           },
       { label: t("library.info.youtube"), icon: <Play />, onSelect: () => window.open(youtubeUrl(g.title), "_blank", "noopener") },
-      { separator: true },
-      { label: t("library.menu.copyTo"), icon: <CopyPlus />, submenu: transferItems(g.items, "copy") },
-      { label: g.items.length > 1 ? t("library.menu.moveAllTo") : t("library.menu.moveTo"), icon: <FolderInput />, submenu: transferItems(g.items, "move"), disabled: anyReplicated },
-      {
-        label: t("library.menu.collections"),
-        icon: <Tags />,
-        submenu: (tags?.tags ?? []).map((tag) => ({
-          label: tag.name,
-          checked: members.has(tag.id),
-          hint: members.get(tag.id)?.auto ? t("library.menu.auto") : undefined,
-          onSelect: () => void toggleTag(tag.id, g.key, members.get(tag.id)),
-        })),
-      },
-      { separator: true },
-      {
-        label: t("library.menu.deleteFiles", { count: g.files.length }),
-        icon: <Trash2 />,
-        danger: true,
-        onSelect: actions.remove,
-      },
+      // A read-only account's menu ends here: no greyed-out rows it can never use.
+      ...(isAdmin
+        ? ([
+            { separator: true },
+            { label: t("library.menu.copyTo"), icon: <CopyPlus />, submenu: transferItems(g.items, "copy") },
+            { label: g.items.length > 1 ? t("library.menu.moveAllTo") : t("library.menu.moveTo"), icon: <FolderInput />, submenu: transferItems(g.items, "move"), disabled: anyReplicated },
+            {
+              label: t("library.menu.collections"),
+              icon: <Tags />,
+              submenu: (tags?.tags ?? []).map((tag) => ({
+                label: tag.name,
+                checked: members.has(tag.id),
+                hint: members.get(tag.id)?.auto ? t("library.menu.auto") : undefined,
+                onSelect: () => void toggleTag(tag.id, g.key, members.get(tag.id)),
+              })),
+            },
+            { separator: true },
+            {
+              label: t("library.menu.deleteFiles", { count: g.files.length }),
+              icon: <Trash2 />,
+              danger: true,
+              onSelect: actions.remove,
+            },
+          ] as MenuItem[])
+        : []),
     ];
   };
 
@@ -880,9 +912,13 @@ function useLibraryMenus() {
     const replicated = item.replicas.length > 1;
     return [
       { label: t("common.actions.download"), icon: <Download />, hint: bytes(item.size), onSelect: () => startDownload(item.replicas[0]) },
-      { label: t("library.menu.copyTo"), icon: <CopyPlus />, submenu: transferItems([item], "copy"), disabled: actions.busy },
-      { label: t("library.menu.moveTo"), icon: <FolderInput />, submenu: transferItems([item], "move"), disabled: actions.busy || replicated },
-      ...(replicated
+      ...(isAdmin
+        ? ([
+            { label: t("library.menu.copyTo"), icon: <CopyPlus />, submenu: transferItems([item], "copy"), disabled: actions.busy },
+            { label: t("library.menu.moveTo"), icon: <FolderInput />, submenu: transferItems([item], "move"), disabled: actions.busy || replicated },
+          ] as MenuItem[])
+        : []),
+      ...(isAdmin && replicated
         ? [
             {
               label: t("library.menu.deleteCopyFrom"),
@@ -903,14 +939,18 @@ function useLibraryMenus() {
             ok ? toast(t("library.menu.nameCopied")) : toast(t("common.actions.copyFailed"), "error"),
           ),
       },
-      { separator: true },
-      {
-        label: replicated ? t("library.menu.deleteAllCopies") : t("library.menu.deleteFiles", { count: 1 }),
-        icon: <Trash2 />,
-        danger: true,
-        onSelect: actions.remove,
-        disabled: actions.busy,
-      },
+      ...(isAdmin
+        ? ([
+            { separator: true },
+            {
+              label: replicated ? t("library.menu.deleteAllCopies") : t("library.menu.deleteFiles", { count: 1 }),
+              icon: <Trash2 />,
+              danger: true,
+              onSelect: actions.remove,
+              disabled: actions.busy,
+            },
+          ] as MenuItem[])
+        : []),
     ];
   };
 

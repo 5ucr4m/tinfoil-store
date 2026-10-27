@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { env } from "./env";
 
@@ -88,12 +89,20 @@ CREATE TABLE IF NOT EXISTS renames (
   created_at INTEGER NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS store_users (
+-- Panel accounts. 'admin' changes the library; 'user' browses and downloads.
+-- One credential per person: the same username and password sign in here and in Tinfoil.
+CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+  -- Off by default: the store only accepts accounts that opted in.
+  tinfoil_enabled INTEGER NOT NULL DEFAULT 0,
+  -- Bumped on password change to invalidate that user's panel sessions.
+  generation INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL,
-  last_used_at INTEGER
+  last_login_at INTEGER,
+  tinfoil_last_used_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS consoles (
@@ -134,6 +143,58 @@ for (const [column, type] of Object.entries(newColumns)) {
     db.prepare("DELETE FROM settings WHERE key = 'titledb'").run();
   }
 }
+
+/*
+ * One-time move from the single panel password plus Tinfoil-only "store users" to
+ * panel accounts with roles. Ids and password hashes are carried over, so signed
+ * download links and the consoles already configured keep working.
+ */
+function migrateAccounts() {
+  const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map(
+    (t) => t.name,
+  );
+  const legacyAdmin = db.prepare("SELECT value FROM settings WHERE key = 'admin'").get() as { value: string } | undefined;
+  const hasStoreUsers = tables.includes("store_users");
+  if (!legacyAdmin && !hasStoreUsers) return;
+
+  const taken = new Set(
+    (db.prepare("SELECT username FROM users").all() as { username: string }[]).map((u) => u.username.toLowerCase()),
+  );
+  const claim = (wanted: string) => {
+    let name = wanted;
+    for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${wanted}-${n}`;
+    taken.add(name.toLowerCase());
+    return name;
+  };
+  const insert = db.prepare(
+    `INSERT INTO users (id, username, password_hash, role, tinfoil_enabled, generation, created_at,
+                        last_login_at, tinfoil_last_used_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+
+  db.transaction(() => {
+    if (legacyAdmin) {
+      const { hash, generation } = JSON.parse(legacyAdmin.value) as { hash: string; generation: number };
+      insert.run(randomBytes(9).toString("base64url"), claim("admin"), hash, "admin", 0, generation || 1, Date.now(), null, null);
+      // The hash now lives in users; keeping the setting would leave two sources of truth.
+      db.prepare("DELETE FROM settings WHERE key = 'admin'").run();
+    }
+    if (hasStoreUsers) {
+      const legacy = db
+        .prepare("SELECT id, username, password_hash, created_at, last_used_at FROM store_users ORDER BY created_at")
+        .all() as { id: string; username: string; password_hash: string; created_at: number; last_used_at: number | null }[];
+      for (const u of legacy) {
+        // Their short, Switch-typeable password also signs them into the panel until they change it.
+        insert.run(u.id, claim(u.username), u.password_hash, "user", 1, 1, u.created_at, null, u.last_used_at);
+      }
+      // Renamed rather than dropped: a rollback can still read it.
+      db.exec("ALTER TABLE store_users RENAME TO store_users_legacy");
+    }
+  })();
+  console.log("[db] migrated panel accounts to the users table");
+}
+
+migrateAccounts();
 
 export function getSetting<T>(key: string, fallback: T): T {
   const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as

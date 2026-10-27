@@ -25,6 +25,7 @@ export function TypeFilter({
   onToggle,
   onClear,
   onManage,
+  canManage,
 }: {
   tags: Tag[];
   genres: { name: string; count: number }[];
@@ -32,6 +33,8 @@ export function TypeFilter({
   onToggle: (key: TypeKey) => void;
   onClear: () => void;
   onManage: () => void;
+  /** Read-only accounts filter by collections but don't edit them. */
+  canManage: boolean;
 }) {
   const { t } = useI18n();
   const [showAll, setShowAll] = useState(false);
@@ -48,13 +51,15 @@ export function TypeFilter({
           {tag.name}
         </Chip>
       ))}
-      <button
-        onClick={onManage}
-        className="inline-flex h-8 items-center gap-1.5 rounded-full border border-dashed border-line px-3 text-[12px] text-mute transition-colors hover:border-signal hover:text-signal"
-      >
-        <Settings2 className="size-3.5" />
-        {t("collections.filter.manage")}
-      </button>
+      {canManage && (
+        <button
+          onClick={onManage}
+          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-dashed border-line px-3 text-[12px] text-mute transition-colors hover:border-signal hover:text-signal"
+        >
+          <Settings2 className="size-3.5" />
+          {t("collections.filter.manage")}
+        </button>
+      )}
       {genres.length > 0 && <span className="mx-1 h-5 w-px bg-line" aria-hidden />}
       {visibleGenres.map((g) => (
         <Chip key={g.name} active={selected.has(`genre:${g.name}`)} onClick={() => onToggle(`genre:${g.name}`)} count={g.count}>

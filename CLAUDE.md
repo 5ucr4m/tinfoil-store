@@ -29,7 +29,7 @@ and `apps/web` (React + Vite + Tailwind v4).
 
 - **README and any repository documentation: English.**
 - Code, comments and identifiers: English.
-- Routes/URLs are English slugs (`/upload`, `/integrations`, `/access`, `/identify`, `/connect`). Never use
+- Routes/URLs are English slugs (`/upload`, `/integrations`, `/access`, `/identify`, `/connect`, `/account`). Never use
   `/tinfoil*` or `/api*` for panel pages: those paths belong to the store and the API on a full page load. The old Portuguese paths
   only redirect; don't add new ones.
 
@@ -65,6 +65,24 @@ sidebar, the mobile top bar and the sign-in screen. Every user-facing change mus
 2. `cd apps/web && bun run i18n:check` (missing/extra keys, placeholder mismatches, hard-coded text) — must
    finish with 0 errors; review its warnings.
 3. Open the changed screens in all three languages and read them.
+
+## Accounts and permissions
+
+- One `users` table: `role` is `admin` or `user` (read-only), plus `tinfoil_enabled` and `generation`
+  (bumped on password change to invalidate that account's panel sessions). One credential per person: the
+  same username and password sign in to the panel and to the store from Tinfoil.
+- Usernames are matched and reserved `COLLATE NOCASE`: they are typed on the Switch's on-screen keyboard.
+- **Permissions live in one place**: the `READ_ONLY` list in `apps/server/src/index.ts`. Everything under
+  `/api` needs a session, and anything not listed there needs an admin, so a new endpoint is admin-only
+  until you add it. Never gate a route by hand in its own router.
+- Self-service is `/api/account` (own password, own Tinfoil access); managing other people is
+  `/api/access/users` and admin-only. An admin can't change their own role or delete their own account.
+- Changing a password, toggling Tinfoil access or removing an account must call `forgetStoreCredentials()`:
+  the store caches verified Basic auth headers for ten minutes.
+- The panel never holds a password in the clear, so the Tinfoil card shows where to get it instead of a
+  copyable value (`StaticField`).
+- Read-only accounts get no route to the pages they can't use, and no disabled buttons: write affordances
+  are hidden, not greyed out (`useSession()` in the web app).
 
 ## Things that bit us (keep them in mind)
 

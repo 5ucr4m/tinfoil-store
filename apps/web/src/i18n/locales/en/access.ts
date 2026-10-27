@@ -1,10 +1,11 @@
 export default {
   title: "Access",
-  meta: "Who can open the store in Tinfoil, and which consoles have connected.",
-  users: {
-    title: "Store users",
-    description: "The login you type in Tinfoil. Create one for yourself and others for anyone you want to let in.",
-    removed: "User removed. Consoles that used this login lose access.",
+  meta: "Who can sign in, what they are allowed to change, and which consoles have connected.",
+  people: {
+    title: "People",
+    description:
+      "Everyone with an account. Admins change the library; read-only accounts browse and download. Tinfoil access is each person's own choice.",
+    removed: "Account removed. Consoles signed in with it lose the store.",
     revealTitle: "Password for {username}",
     revealNote: "Write it down now. It won't be shown again, but you can generate a new one.",
     readabilityNote:
@@ -12,13 +13,20 @@ export default {
     done: "I wrote it down",
     username: "User",
     password: "Password",
-    lastUsed: "last access {when}",
+    you: "you",
+    roleLabel: "Role of {username}",
+    lastLogin: "signed in {when}",
+    neverSignedIn: "never signed in",
+    tinfoilLabel: "Tinfoil access for {username}",
+    tinfoilOn: "Tinfoil on",
+    tinfoilOff: "Tinfoil off",
+    tinfoilSince: "Tinfoil on · console {when}",
     newPassword: "New password",
     removeLabel: "Remove {username}",
-    empty: "Without users, the store refuses every request. Create the first one below.",
-    placeholder: "username, e.g. switch-living-room",
-    newUserLabel: "New user name",
-    create: "Create user",
+    placeholder: "username, e.g. marcus",
+    newUserLabel: "New account name",
+    newRoleLabel: "Role for the new account",
+    create: "Create account",
   },
   consoles: {
     title: "Consoles",
@@ -35,13 +43,5 @@ export default {
     seen: "seen {when}",
     hits: { one: "{count} request", other: "{count} requests" },
     forget: "Forget console",
-  },
-  panelPassword: {
-    title: "Panel password",
-    description: "Changing the password signs out every browser except this one.",
-    changed: "Panel password changed. Other sessions were signed out.",
-    current: "Current password",
-    next: "New password",
-    submit: "Change password",
   },
 };

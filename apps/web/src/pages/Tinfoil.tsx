@@ -1,37 +1,41 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
 import { Pins } from "../components/Cartridge";
 import { ProviderIcon } from "../components/ProviderIcon";
-import { Badge, Button, CopyField, Field, Input, PageHeader, Section, useToast } from "../components/ui";
+import { Badge, Button, CopyField, Field, Input, PageHeader, Section, StaticField, Switch, useToast } from "../components/ui";
 import { Trans, useI18n } from "../i18n";
-import { api, type Connection, type Integration, type StoreSettings, type StoreUser } from "../lib/api";
+import { api, type Account, type Connection, type Integration, type StoreSettings } from "../lib/api";
 import { ago } from "../lib/format";
+import { useSession } from "../lib/session";
 
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 
 export function TinfoilPage() {
   const { t } = useI18n();
-  const settings = useQuery({
-    queryKey: ["store-settings"],
-    queryFn: () => api<{ settings: StoreSettings; connection: Connection }>("/access/settings"),
+  const { isAdmin } = useSession();
+  const account = useQuery({ queryKey: ["account"], queryFn: () => api<{ user: Account }>("/account") });
+  const connection = useQuery({
+    queryKey: ["connection"],
+    queryFn: () => api<{ connection: Connection }>("/account/connection"),
   });
-  const users = useQuery({ queryKey: ["store-users"], queryFn: () => api<{ users: StoreUser[] }>("/access/users") });
   const integrations = useQuery({
     queryKey: ["integrations"],
     queryFn: () => api<{ integrations: Integration[] }>("/integrations"),
+    enabled: isAdmin,
   });
 
-  const conn = settings.data?.connection;
-  const firstUser = users.data?.users[0]?.username;
+  const conn = connection.data?.connection;
+  const me = account.data?.user;
   const hasDrive = integrations.data?.integrations.some((i) => i.type === "gdrive");
 
   return (
     <>
       <PageHeader title={t("tinfoil.title")} meta={t("tinfoil.meta")} />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+      {me && <AccessSection me={me} />}
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         <Section title={t("tinfoil.console.title")}>
           <ol className="flex flex-col gap-4">
             {(["tinfoil.console.step1", "tinfoil.console.step2", "tinfoil.console.step3", "tinfoil.console.step4"] as const).map((k, i) => (
@@ -43,11 +47,6 @@ export function TinfoilPage() {
               </li>
             ))}
           </ol>
-          {users.data && users.data.users.length === 0 && (
-            <div className="mt-5 rounded-2xl bg-pin-dim px-4 py-3 text-sm">
-              <Trans k="tinfoil.console.noUser" components={{ link: <Link to="/access" className="font-medium underline underline-offset-2" /> }} />
-            </div>
-          )}
           {conn && conn.protocol === "http" && conn.host !== "localhost" && (
             <p className="mt-5 rounded-2xl border border-line px-4 py-3 text-[13px] text-mute">
               <Trans k="tinfoil.console.httpNote" />
@@ -56,7 +55,7 @@ export function TinfoilPage() {
         </Section>
 
         {/* Mirror of Tinfoil's "new location" form */}
-        {conn && (
+        {conn && me?.tinfoilEnabled && (
           <div
             className="self-start rounded-[22px] bg-panel p-3 pt-0 text-ink ring-1 ring-line dark:bg-shell dark:text-white dark:ring-shell-edge"
             style={{ clipPath: "polygon(0 0, calc(100% - 26px) 0, 100% 26px, 100% 100%, 0 100%)" }}
@@ -70,7 +69,9 @@ export function TinfoilPage() {
               <CopyField label={t("tinfoil.fields.host")} value={conn.host} />
               <CopyField label={t("tinfoil.fields.port")} value={conn.port} />
               <CopyField label={t("tinfoil.fields.path")} value={conn.path} />
-              <CopyField label={t("tinfoil.fields.username")} value={firstUser ?? t("tinfoil.card.createInAccess")} />
+              <CopyField label={t("tinfoil.fields.username")} value={me.username} />
+              {/* The panel never holds the password in the clear, so this one points instead of copying. */}
+              <StaticField label={t("tinfoil.fields.password")} value={t("tinfoil.card.passwordHint")} />
               <CopyField label={t("tinfoil.fields.title")} value="Cartucho" />
               {LOOPBACK.has(conn.host) && (
                 <p className="mt-1 rounded-xl bg-danger-soft px-3 py-2 text-[12px] leading-relaxed text-danger">
@@ -80,14 +81,61 @@ export function TinfoilPage() {
             </div>
           </div>
         )}
+        {me && !me.tinfoilEnabled && (
+          <div className="self-start rounded-[22px] border border-dashed border-line px-5 py-8 text-center text-sm text-mute">
+            {t("tinfoil.access.off")}
+          </div>
+        )}
       </div>
 
-      <div className="mt-6 flex flex-col gap-6">
-        <StoreSettingsSection />
-        {hasDrive && conn && <DirectDriveSection conn={conn} />}
-        <TitleDbSection />
-      </div>
+      {isAdmin && (
+        <div className="mt-6 flex flex-col gap-6">
+          <StoreSettingsSection />
+          {hasDrive && conn && <DirectDriveSection conn={conn} />}
+          <TitleDbSection />
+        </div>
+      )}
     </>
+  );
+}
+
+/** Each person opens their own door to the store; nobody else's account is involved. */
+function AccessSection({ me }: { me: Account }) {
+  const { t } = useI18n();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const save = useMutation({
+    mutationFn: (enabled: boolean) => api<{ user: Account }>("/account/tinfoil", { method: "PUT", json: { enabled } }),
+    onSuccess: ({ user }) => {
+      qc.setQueryData(["account"], { user });
+      void qc.invalidateQueries({ queryKey: ["auth"] });
+      toast(user.tinfoilEnabled ? t("tinfoil.access.turnedOn") : t("tinfoil.access.turnedOff"));
+    },
+    onError: (e) => toast(e.message, "error"),
+  });
+
+  return (
+    <Section
+      title={t("tinfoil.access.title")}
+      description={t("tinfoil.access.description")}
+      actions={
+        <label className="flex items-center gap-3 rounded-2xl border border-line bg-raised px-4 py-2.5">
+          <span className="text-[13px]">{t("tinfoil.access.toggle")}</span>
+          <Switch
+            checked={me.tinfoilEnabled}
+            onChange={(v) => save.mutate(v)}
+            label={t("tinfoil.access.toggle")}
+          />
+        </label>
+      }
+    >
+      {/* With the switch off there is nothing to report, and the description already says what it does. */}
+      {me.tinfoilEnabled && (
+        <p className="data text-[12px] text-mute">
+          {me.tinfoilLastUsedAt ? t("tinfoil.access.lastUsed", { when: ago(me.tinfoilLastUsedAt) }) : t("tinfoil.access.never")}
+        </p>
+      )}
+    </Section>
   );
 }
 

@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { KeyRound, Plus, Trash2, UserRound } from "lucide-react";
+import { KeyRound, Plus, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { Button, CopyField, cx, Field, Input, PageHeader, Section, Switch, useToast } from "../components/ui";
+import { RoleMark, RoleTag, roleLabel } from "../components/RoleMark";
+import { Button, CopyField, cx, Input, PageHeader, Section, Switch, useToast } from "../components/ui";
 import { useI18n } from "../i18n";
-import { api, type Console, type StoreSettings, type StoreUser } from "../lib/api";
+import { api, type Account, type Console, type Role, type StoreSettings } from "../lib/api";
 import { ago } from "../lib/format";
+import { useSession } from "../lib/session";
 
 export function AccessPage() {
   const { t } = useI18n();
@@ -13,41 +15,87 @@ export function AccessPage() {
     <>
       <PageHeader title={t("access.title")} meta={t("access.meta")} />
       <div className="flex flex-col gap-6">
-        <UsersSection />
+        <PeopleSection />
         <ConsolesSection />
-        <PanelPasswordSection />
       </div>
     </>
   );
 }
 
-function UsersSection() {
+const ROLES: Role[] = ["admin", "user"];
+
+/** Two states, so a segmented control rather than a dropdown: both options stay visible. */
+function RoleChoice({ value, onChange, label }: { value: Role; onChange: (role: Role) => void; label: string }) {
+  const { t } = useI18n();
+  return (
+    <div className="flex rounded-lg border border-line bg-panel p-0.5 text-[12px]" role="radiogroup" aria-label={label}>
+      {ROLES.map((role) => (
+        <button
+          key={role}
+          type="button"
+          role="radio"
+          aria-checked={value === role}
+          onClick={() => onChange(role)}
+          className={cx(
+            "flex items-center gap-1.5 rounded-md px-2.5 py-1 transition-colors",
+            value === role ? "bg-raised font-medium shadow-card" : "text-mute hover:text-ink",
+          )}
+        >
+          <RoleMark role={role} className={cx("size-3", value === role && role === "admin" && "text-signal")} />
+          {t(roleLabel(role))}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PeopleSection() {
   const { t } = useI18n();
   const qc = useQueryClient();
   const toast = useToast();
-  const users = useQuery({ queryKey: ["store-users"], queryFn: () => api<{ users: StoreUser[] }>("/access/users") });
+  const { user: me } = useSession();
+  const people = useQuery({ queryKey: ["people"], queryFn: () => api<{ users: Account[] }>("/access/users") });
   const [username, setUsername] = useState("");
+  const [role, setRole] = useState<Role>("user");
   const [revealed, setRevealed] = useState<{ username: string; password: string } | null>(null);
 
+  const invalidate = () => void qc.invalidateQueries({ queryKey: ["people"] });
+
   const create = useMutation({
-    mutationFn: () => api<{ username: string; password: string }>("/access/users", { method: "POST", json: { username } }),
+    mutationFn: () => api<{ username: string; password: string }>("/access/users", { method: "POST", json: { username, role } }),
     onSuccess: (creds) => {
       setRevealed(creds);
       setUsername("");
-      void qc.invalidateQueries({ queryKey: ["store-users"] });
+      invalidate();
     },
     onError: (e) => toast(e.message, "error"),
   });
   const reset = useMutation({
     mutationFn: (id: string) => api<{ username: string; password: string }>(`/access/users/${id}/reset`, { method: "POST" }),
     onSuccess: (creds) => setRevealed(creds),
+    onError: (e) => toast(e.message, "error"),
+  });
+  const patch = useMutation({
+    mutationFn: ({ id, ...body }: { id: string; role?: Role; tinfoilEnabled?: boolean }) =>
+      api(`/access/users/${id}`, { method: "PATCH", json: body }),
+    onSuccess: invalidate,
+    onError: (e) => {
+      toast(e.message, "error");
+      invalidate();
+    },
+    onMutate: ({ id, ...body }) => {
+      qc.setQueryData<{ users: Account[] }>(["people"], (d) =>
+        d ? { users: d.users.map((u) => (u.id === id ? { ...u, ...body } : u)) } : d,
+      );
+    },
   });
   const remove = useMutation({
     mutationFn: (id: string) => api(`/access/users/${id}`, { method: "DELETE" }),
     onSuccess: () => {
-      toast(t("access.users.removed"));
-      void qc.invalidateQueries({ queryKey: ["store-users"] });
+      toast(t("access.people.removed"));
+      invalidate();
     },
+    onError: (e) => toast(e.message, "error"),
   });
 
   const submit = (e: FormEvent) => {
@@ -56,10 +104,7 @@ function UsersSection() {
   };
 
   return (
-    <Section
-      title={t("access.users.title")}
-      description={t("access.users.description")}
-    >
+    <Section title={t("access.people.title")} description={t("access.people.description")}>
       <AnimatePresence>
         {revealed && (
           <motion.div
@@ -69,15 +114,19 @@ function UsersSection() {
             className="overflow-hidden"
           >
             <div className="mb-5 rounded-2xl bg-pin-dim/50 p-4 text-ink ring-1 ring-pin/40 dark:bg-shell dark:text-white dark:ring-shell-edge">
-              <p className="text-sm font-medium">{t("access.users.revealTitle", { username: revealed.username })}</p>
-              <p className="mt-1 text-[13px] text-mute dark:text-white/60">{t("access.users.revealNote")}</p>
+              <p className="text-sm font-medium">{t("access.people.revealTitle", { username: revealed.username })}</p>
+              <p className="mt-1 text-[13px] text-mute dark:text-white/60">{t("access.people.revealNote")}</p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2 [&>div]:bg-raised dark:[&>div]:border-white/10 dark:[&>div]:bg-white/5 dark:[&_*]:text-white">
-                <CopyField label={t("access.users.username")} value={revealed.username} />
-                <CopyField label={t("access.users.password")} value={revealed.password} display={revealed.password.replace(/(.{4})(?=.)/g, "$1 ")} />
+                <CopyField label={t("access.people.username")} value={revealed.username} />
+                <CopyField
+                  label={t("access.people.password")}
+                  value={revealed.password}
+                  display={revealed.password.replace(/(.{4})(?=.)/g, "$1 ")}
+                />
               </div>
-              <p className="mt-2 text-[12px] text-mute dark:text-white/60">{t("access.users.readabilityNote")}</p>
+              <p className="mt-2 text-[12px] text-mute dark:text-white/60">{t("access.people.readabilityNote")}</p>
               <button onClick={() => setRevealed(null)} className="mt-3 text-[13px] font-medium text-ink hover:underline dark:text-pin">
-                {t("access.users.done")}
+                {t("access.people.done")}
               </button>
             </div>
           </motion.div>
@@ -86,50 +135,91 @@ function UsersSection() {
 
       <ul className="flex flex-col divide-y divide-line overflow-hidden rounded-2xl border border-line bg-raised">
         <AnimatePresence initial={false}>
-          {(users.data?.users ?? []).map((u) => (
-            <motion.li
-              key={u.id}
-              layout
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0, height: 0 }}
-              className="flex flex-wrap items-center gap-3 px-4 py-3"
-            >
-              <UserRound className="size-4 text-mute" />
-              <span className="data text-[13px]">{u.username}</span>
-              <span className="text-[12px] text-mute">{t("access.users.lastUsed", { when: ago(u.lastUsedAt) })}</span>
-              <div className="ml-auto flex gap-1">
-                <Button size="sm" variant="ghost" icon={<KeyRound className="size-3.5" />} onClick={() => reset.mutate(u.id)} loading={reset.isPending && reset.variables === u.id}>
-                  {t("access.users.newPassword")}
-                </Button>
-                <button
-                  onClick={() => remove.mutate(u.id)}
-                  aria-label={t("access.users.removeLabel", { username: u.username })}
-                  className="grid size-8 place-items-center rounded-lg text-faint hover:bg-danger-soft hover:text-danger"
-                >
-                  <Trash2 className="size-4" />
-                </button>
-              </div>
-            </motion.li>
-          ))}
+          {(people.data?.users ?? []).map((u) => {
+            const isMe = u.id === me.id;
+            return (
+              <motion.li
+                key={u.id}
+                layout
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, height: 0 }}
+                className="flex flex-col gap-2.5 px-4 py-3.5"
+              >
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <RoleMark role={u.role} className={cx("size-4", u.role === "admin" ? "text-signal" : "text-mute")} />
+                  <span className="data text-[13px]">{u.username}</span>
+                  {isMe && <span className="eyebrow text-[9px]">{t("access.people.you")}</span>}
+                  <div className="ml-auto">
+                    {/* Your own role is stated, not offered: changing it could lock the panel's settings away. */}
+                    {isMe ? (
+                      <RoleTag role={u.role} className="text-[12px] text-mute" />
+                    ) : (
+                      <RoleChoice
+                        value={u.role}
+                        onChange={(role) => patch.mutate({ id: u.id, role })}
+                        label={t("access.people.roleLabel", { username: u.username })}
+                      />
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] text-mute">
+                  <span className="flex items-center gap-2">
+                    <Switch
+                      checked={u.tinfoilEnabled}
+                      onChange={(v) => patch.mutate({ id: u.id, tinfoilEnabled: v })}
+                      label={t("access.people.tinfoilLabel", { username: u.username })}
+                    />
+                    {u.tinfoilEnabled
+                      ? u.tinfoilLastUsedAt
+                        ? t("access.people.tinfoilSince", { when: ago(u.tinfoilLastUsedAt) })
+                        : t("access.people.tinfoilOn")
+                      : t("access.people.tinfoilOff")}
+                  </span>
+                  <span>
+                    {u.lastLoginAt ? t("access.people.lastLogin", { when: ago(u.lastLoginAt) }) : t("access.people.neverSignedIn")}
+                  </span>
+                  <span className="ml-auto flex items-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon={<KeyRound className="size-3.5" />}
+                      onClick={() => reset.mutate(u.id)}
+                      loading={reset.isPending && reset.variables === u.id}
+                    >
+                      {t("access.people.newPassword")}
+                    </Button>
+                    {!isMe && (
+                      <button
+                        onClick={() => remove.mutate(u.id)}
+                        aria-label={t("access.people.removeLabel", { username: u.username })}
+                        className="grid size-8 place-items-center rounded-lg text-faint hover:bg-danger-soft hover:text-danger"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    )}
+                  </span>
+                </div>
+              </motion.li>
+            );
+          })}
         </AnimatePresence>
-        {users.data && users.data.users.length === 0 && (
-          <li className="px-4 py-6 text-center text-sm text-mute">
-            {t("access.users.empty")}
-          </li>
-        )}
       </ul>
 
-      <form onSubmit={submit} className="mt-4 flex gap-2">
+      <form onSubmit={submit} className="mt-4 flex flex-wrap items-center gap-2">
         <Input
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder={t("access.users.placeholder")}
-          aria-label={t("access.users.newUserLabel")}
+          placeholder={t("access.people.placeholder")}
+          aria-label={t("access.people.newUserLabel")}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           className="max-w-xs"
         />
+        <RoleChoice value={role} onChange={setRole} label={t("access.people.newRoleLabel")} />
         <Button type="submit" icon={<Plus className="size-4" />} loading={create.isPending} disabled={!username.trim()}>
-          {t("access.users.create")}
+          {t("access.people.create")}
         </Button>
       </form>
     </Section>
@@ -230,43 +320,6 @@ function ConsolesSection() {
           ))}
         </ul>
       )}
-    </Section>
-  );
-}
-
-function PanelPasswordSection() {
-  const { t } = useI18n();
-  const toast = useToast();
-  const [current, setCurrent] = useState("");
-  const [password, setPassword] = useState("");
-  const change = useMutation({
-    mutationFn: () => api("/auth/password", { method: "POST", json: { current, password } }),
-    onSuccess: () => {
-      toast(t("access.panelPassword.changed"));
-      setCurrent("");
-      setPassword("");
-    },
-    onError: (e) => toast(e.message, "error"),
-  });
-  return (
-    <Section title={t("access.panelPassword.title")} description={t("access.panelPassword.description")}>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          change.mutate();
-        }}
-        className="grid max-w-2xl gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
-      >
-        <Field label={t("access.panelPassword.current")}>
-          {(id) => <Input id={id} type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />}
-        </Field>
-        <Field label={t("access.panelPassword.next")}>
-          {(id) => <Input id={id} type="password" autoComplete="new-password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required />}
-        </Field>
-        <Button type="submit" loading={change.isPending}>
-          {t("access.panelPassword.submit")}
-        </Button>
-      </form>
     </Section>
   );
 }

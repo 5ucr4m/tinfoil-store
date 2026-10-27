@@ -7,10 +7,11 @@ import { Wordmark } from "../components/Shell";
 import { Button, Field, Input } from "../components/ui";
 import { useI18n } from "../i18n";
 import { LegalLinks } from "./Legal";
-import { api } from "../lib/api";
+import { api, type SessionUser } from "../lib/api";
 
-export function AuthPage({ setup, onDone }: { setup: boolean; onDone: () => void }) {
+export function AuthPage({ setup, onDone }: { setup: boolean; onDone: (user: SessionUser) => void }) {
   const { t } = useI18n();
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -22,8 +23,11 @@ export function AuthPage({ setup, onDone }: { setup: boolean; onDone: () => void
     if (setup && password !== confirm) return setError(t("auth.mismatch"));
     setLoading(true);
     try {
-      await api(setup ? "/auth/setup" : "/auth/login", { method: "POST", json: { password } });
-      onDone();
+      const { user } = await api<{ user: SessionUser }>(setup ? "/auth/setup" : "/auth/login", {
+        method: "POST",
+        json: { username: username.trim(), password },
+      });
+      onDone(user);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("auth.failed"));
     } finally {
@@ -58,12 +62,27 @@ export function AuthPage({ setup, onDone }: { setup: boolean; onDone: () => void
               {setup ? t("auth.setupBody") : t("auth.loginBody")}
             </p>
             <div className="mt-6 flex flex-col gap-4">
+              <Field label={t("auth.user")} hint={setup ? t("auth.userHint") : undefined}>
+                {(id) => (
+                  <Input
+                    id={id}
+                    autoFocus
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    autoComplete="username"
+                    placeholder={t("auth.userPlaceholder")}
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    required
+                  />
+                )}
+              </Field>
               <Field label={t("auth.password")}>
                 {(id) => (
                   <Input
                     id={id}
                     type="password"
-                    autoFocus
                     autoComplete={setup ? "new-password" : "current-password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}

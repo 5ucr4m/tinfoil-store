@@ -8,6 +8,7 @@ import { localeOf, tr } from "../i18n";
 import { cachedImage, type ImageKind } from "../images";
 import type { FileRow } from "../library";
 import { parseFileName } from "../titles";
+import { hasTinfoilUsers, tinfoilUserByName, userById } from "../users";
 
 /**
  * The Tinfoil-facing store. Tinfoil authenticates with HTTP Basic and identifies
@@ -30,9 +31,9 @@ const clientIp = (c: Context) =>
   c.req.header("x-forwarded-for")?.split(",")[0].trim() ?? c.req.header("x-real-ip") ?? "local";
 
 const basicAuth: MiddlewareHandler = async (c, next) => {
-  const hasUsers = db.prepare("SELECT 1 FROM store_users LIMIT 1").get();
-  if (!hasUsers) {
-    return c.json({ error: tr(localeOf(c), "store.noUsers") });
+  // Accounts opt in to the store one by one; with none opted in there is nothing to sign into.
+  if (!hasTinfoilUsers()) {
+    return c.json({ error: tr(localeOf(c), "store.noTinfoilUsers") });
   }
   const header = c.req.header("authorization") ?? "";
   if (!header.startsWith("Basic ")) return unauthorized(c);
@@ -55,9 +56,7 @@ const basicAuth: MiddlewareHandler = async (c, next) => {
   const username = decoded.slice(0, sep);
   // Generated passwords never contain whitespace; tolerate it when typed from the grouped display.
   const password = decoded.slice(sep + 1).replace(/\s+/g, "");
-  const user = db.prepare("SELECT id, password_hash FROM store_users WHERE username = ?").get(username) as
-    | { id: string; password_hash: string }
-    | undefined;
+  const user = tinfoilUserByName(username);
   if (!user || !(await verifyPassword(password, user.password_hash))) {
     const count = (lock?.count ?? 0) + 1;
     // Five free attempts, then 2s, 4s, 8s… capped at 15 minutes.
@@ -68,7 +67,7 @@ const basicAuth: MiddlewareHandler = async (c, next) => {
 
   verified.set(cacheKey, { userId: user.id, expiresAt: Date.now() + 10 * 60_000 });
   c.set("storeUserId" as never, user.id as never);
-  db.prepare("UPDATE store_users SET last_used_at = ? WHERE id = ?").run(Date.now(), user.id);
+  db.prepare("UPDATE users SET tinfoil_last_used_at = ? WHERE id = ?").run(Date.now(), user.id);
   await next();
 };
 
@@ -97,8 +96,13 @@ const consoleGate: MiddlewareHandler = async (c, next) => {
       : undefined;
     if (!allowed?.allowed) {
       const locale = localeOf(c);
+      // Only an admin can approve a console, so everyone else is told to ask one.
+      const self = userById(c.get("storeUserId" as never) as string);
+      const key = self?.role === "admin" ? "store.consoleNotApprovedUid" : "store.consoleAskAdminUid";
       return c.json({
-        error: uid ? tr(locale, "store.consoleNotApprovedUid", { uid: uid.slice(0, 8) }) : tr(locale, "store.consoleNotApproved"),
+        error: uid
+          ? tr(locale, key, { uid: uid.slice(0, 8) })
+          : tr(locale, self?.role === "admin" ? "store.consoleNotApproved" : "store.consoleAskAdmin"),
       });
     }
   }
@@ -128,7 +132,8 @@ function checkToken(subject: string, token: string) {
   const expected = Buffer.from(sign(subject, userId, exp));
   const given = Buffer.from(sig);
   if (expected.length !== given.length || !timingSafeEqual(expected, given)) return false;
-  return Boolean(db.prepare("SELECT 1 FROM store_users WHERE id = ?").get(userId));
+  // Links stop working when the account is removed or its Tinfoil access is turned off.
+  return Boolean(db.prepare("SELECT 1 FROM users WHERE id = ? AND tinfoil_enabled = 1").get(userId));
 }
 
 const imageToken = (titleId: string, userId: string) => downloadToken(`img:${titleId}`, userId);

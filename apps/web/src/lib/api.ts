@@ -25,6 +25,9 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
   const body = res.headers.get("content-type")?.includes("json") ? await res.json() : null;
   if (!res.ok) {
     if (res.status === 401 && !path.startsWith("/auth")) window.dispatchEvent(new Event("cartucho:logout"));
+    // A 403 means the role no longer matches what this tab believes (an admin demoted this
+    // account, or the tab is stale): re-read the session so the panel stops offering it.
+    if (res.status === 403) window.dispatchEvent(new Event("cartucho:recheck-session"));
     throw new ApiError(body?.error ?? translate("common.errors.generic", { status: res.status }), res.status);
   }
   return body as T;
@@ -90,11 +93,21 @@ export interface TitleInfo {
   bannerUrl: string | null;
 }
 
-export interface StoreUser {
+export type Role = "admin" | "user";
+
+/** The signed-in account. Admins change the library; read-only accounts browse and download. */
+export interface SessionUser {
   id: string;
   username: string;
+  role: Role;
+  tinfoilEnabled: boolean;
+}
+
+/** An account as the Access page lists it. */
+export interface Account extends SessionUser {
   createdAt: number;
-  lastUsedAt: number | null;
+  lastLoginAt: number | null;
+  tinfoilLastUsedAt: number | null;
 }
 
 export interface Console {

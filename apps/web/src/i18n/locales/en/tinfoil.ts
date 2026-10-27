@@ -1,19 +1,29 @@
 export default {
   title: "Connect Tinfoil",
   meta: "Add the store once on the console. After that, everything in the library shows up in Tinfoil.",
+  access: {
+    title: "Your Tinfoil access",
+    description:
+      "Turn it on to open this store on a Switch. On the console you sign in with the same user and password you use here.",
+    toggle: "Tinfoil access",
+    off: "The values for your console appear here once Tinfoil access is on.",
+    turnedOn: "Tinfoil access on. Add the store on the console with the values on the card.",
+    turnedOff: "Tinfoil access off. Consoles signed in with your account lose the store.",
+    lastUsed: "A console last opened the store {when}.",
+    never: "No console has opened the store with your account yet.",
+  },
   console: {
     title: "On the console",
     step1: "Open Tinfoil and go to <b>File Browser</b>.",
     step2: "Press <b>−</b> (minus) to add a new location.",
-    step3: "Fill in the fields as shown on the card. For the password, use the store user's password.",
+    step3: "Fill in the fields as shown on the card. For the password, use the one you sign in to the panel with.",
     step4: "Press <b>X</b> to save and go back. Games show up in <b>New Games</b> and in the store itself.",
-    noUser: "You don't have a store user yet. <link>Create one in Access</link> before connecting.",
     httpNote:
       "The store is answering over <b>http</b>. Away from home, publish it behind HTTPS (Dokploy's Traefik does this) and set the public address below.",
   },
   card: {
     title: "Values for Tinfoil",
-    createInAccess: "create one in Access",
+    passwordHint: "the password you sign in with",
     loopback:
       "The Switch can't reach \"{host}\": that address points to the console itself. Use this computer's IP on the network (e.g. 192.168.x.x). Open the panel through that IP or fill in the public address below.",
   },
@@ -52,5 +62,5 @@ export default {
     failed: "Failed: {error}",
     idle: "Not downloaded yet.",
   },
-  fields: { protocol: "Protocol", host: "Host", port: "Port", path: "Path", username: "Username", title: "Title", url: "URL" },
+  fields: { protocol: "Protocol", host: "Host", port: "Port", path: "Path", username: "Username", password: "Password", title: "Title", url: "URL" },
 };
